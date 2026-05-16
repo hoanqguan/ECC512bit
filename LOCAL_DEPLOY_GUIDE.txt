@@ -1,0 +1,22 @@
+ECC Crypto Toolkit - Local Ready
+
+Run:
+npm install
+npm run dev
+
+Build:
+npm run build
+
+Deploy supported:
+- Vercel
+- Netlify
+- GitHub Pages
+
+Features:
+- BrainpoolP512r1 ECC
+- ECDSA + SHA-512
+- Encrypt / Decrypt
+- Sign / Verify
+- Local key storage
+- State persistence between tabs
+- Modern dark UI

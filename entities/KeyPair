@@ -1,0 +1,36 @@
+{
+  "name": "KeyPair",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "User-defined name for this key pair"
+    },
+    "curve": {
+      "type": "string",
+      "description": "ECC curve used",
+      "default": "brainpoolP512r1"
+    },
+    "public_key_pem": {
+      "type": "string",
+      "description": "Public key in PEM format"
+    },
+    "private_key_pem": {
+      "type": "string",
+      "description": "Private key in PEM format (encrypted or raw)"
+    },
+    "fingerprint": {
+      "type": "string",
+      "description": "SHA-256 fingerprint of the public key"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional notes about this key pair"
+    }
+  },
+  "required": [
+    "name",
+    "public_key_pem",
+    "private_key_pem"
+  ]
+}
