@@ -33,6 +33,8 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
     setFile(f);
     setResult(null);
     setWarning("");
+    setSignature("");
+    setSigFileName(null);
     const reader = new FileReader();
     reader.onload = (ev) => setFileBytes(new Uint8Array(ev.target.result));
     reader.readAsArrayBuffer(f);
@@ -44,6 +46,7 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
     const f = e.target.files[0];
     if (!f) return;
     setSigFileName(f.name);
+    setResult(null);
     setWarning("");
     const reader = new FileReader();
     const lowerName = f.name.toLowerCase();
@@ -56,7 +59,7 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
     reader.readAsText(f);
   };
 
-  const clearSigFile = () => { setSigFileName(null); setSignature(""); sigRef.current.value = ""; };
+  const clearSigFile = () => { setSigFileName(null); setSignature(""); sigRef.current.value = ""; setResult(null); };
 
   const handleVerify = async () => {
     if (mode === "text" && !message.trim()) { setWarning(t('enterMessageToVerify')); toast.error(t('enterMessageToVerify')); return; }
@@ -105,7 +108,7 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
         {!selectedKey && (
           <div className="mt-2">
             <Label className="text-xs font-medium">{t('insertPublicKeyVerify')}</Label>
-            <Textarea placeholder={t('pastePublicKeyPlaceholder')} value={manualPublic} onChange={(e) => { setManualPublic(e.target.value); setWarning(""); }} className="mt-1 h-20 resize-none font-mono text-xs" />
+            <Textarea placeholder={t('pastePublicKeyPlaceholder')} value={manualPublic} onChange={(e) => { setManualPublic(e.target.value); setResult(null); setWarning(""); }} className="mt-1 h-20 resize-none font-mono text-xs" />
           </div>
         )}
         {selectedKey ? (
@@ -134,7 +137,7 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
             <Textarea
               placeholder={t('enterMessageToVerify')}
               value={message}
-              onChange={(e) => { setMessage(e.target.value); setWarning(""); }}
+              onChange={(e) => { setMessage(e.target.value); setResult(null); setWarning(""); }}
               className="mt-1 h-20 resize-none font-mono text-sm"
             />
           </div>
@@ -204,7 +207,7 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
             <Textarea
             placeholder={sigFormat === "hex" ? t('pasteHexSignature') || "Paste hex signature..." : t('pasteBase64Signature') || "Paste the base64 signature, or import a .sig file above..."}
             value={signature}
-            onChange={(e) => { setSignature(e.target.value); setSigFileName(null); setWarning(""); }}
+            onChange={(e) => { setSignature(e.target.value); setSigFileName(null); setResult(null); setWarning(""); }}
             className="h-20 resize-none font-mono text-xs"
           />
         </div>

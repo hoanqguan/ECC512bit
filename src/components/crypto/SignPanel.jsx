@@ -91,7 +91,7 @@ export default function SignPanel({ selectedKey, showKeyList }) {
         {!selectedKey && (
           <div className="mt-2">
             <Label className="text-xs font-medium">{t('insertPrivateKeySign')}</Label>
-            <Textarea placeholder={t('pastePrivateKeyPlaceholder')} value={manualPrivate} onChange={(e) => { setManualPrivate(e.target.value); setWarning(""); }} className="mt-1 h-20 resize-none font-mono text-xs" />
+            <Textarea placeholder={t('pastePrivateKeyPlaceholder')} value={manualPrivate} onChange={(e) => { setManualPrivate(e.target.value); setSignature(""); setBase64Signature(""); setWarning(""); }} className="mt-1 h-20 resize-none font-mono text-xs" />
           </div>
         )}
         {selectedKey ? (
@@ -114,8 +114,8 @@ export default function SignPanel({ selectedKey, showKeyList }) {
 
         {/* Mode toggle */}
         <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
-          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => { setMode("text"); setSignature(""); setBase64Signature(""); }} className="h-6 px-3 text-xs">{t('modeText')}</Button>
-          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => { setMode("file"); setSignature(""); setBase64Signature(""); }} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
+          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => { setMode("text"); setSignature(""); setBase64Signature(""); setWarning(""); }} className="h-6 px-3 text-xs">{t('modeText')}</Button>
+          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => { setMode("file"); setSignature(""); setBase64Signature(""); setWarning(""); }} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
         </div>
 
         {mode === "text" ? (
@@ -124,7 +124,7 @@ export default function SignPanel({ selectedKey, showKeyList }) {
             <Textarea
               placeholder={t('enterMessageToSign')}
               value={message}
-              onChange={(e) => { setMessage(e.target.value); setWarning(""); }}
+              onChange={(e) => { setMessage(e.target.value); setSignature(""); setBase64Signature(""); setWarning(""); }}
               className="mt-1 h-28 resize-none font-mono text-sm"
             />
           </div>
