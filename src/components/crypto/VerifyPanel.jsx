@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +26,10 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
   const sigRef = useRef();
 
   let effectivePubKey = selectedKey?.public_key_pem || manualPublic || "";
+
+  useEffect(() => {
+    setResult(null);
+  }, [selectedKey]);
 
   const handleFileChange = (e) => {
     const f = e.target.files[0];
@@ -187,6 +191,7 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
                     }
                   }
                   setSigFormat(newFormat);
+                  setResult(null);
                 }}
               >
                 <option value="base64">Base64 (r||s)</option>
