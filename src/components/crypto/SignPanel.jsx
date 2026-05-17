@@ -17,7 +17,8 @@ export default function SignPanel({ selectedKey, showKeyList }) {
   const [file, setFile] = useState(null);
   const [fileBytes, setFileBytes] = useState(null);
   const [signature, setSignature] = useState("");
-  const [sigFormat, setSigFormat] = useState("hex");
+  const [base64Signature, setBase64Signature] = useState("");
+  const [sigFormat, setSigFormat] = useState("base64");
   const [loading, setLoading] = useState(false);
   const [blurred, setBlurred] = useState(true);
   const [manualPrivate, setManualPrivate] = useState("");
@@ -34,7 +35,7 @@ export default function SignPanel({ selectedKey, showKeyList }) {
     reader.readAsArrayBuffer(f);
   };
 
-  const clearFile = () => { setFile(null); setFileBytes(null); fileRef.current.value = ""; };
+  const clearFile = () => { setFile(null); setFileBytes(null); fileRef.current.value = ""; setSignature(""); setBase64Signature(""); };
 
   const handleSign = async () => {
     const privatePem = selectedKey?.private_key_pem || manualPrivate;
@@ -47,6 +48,7 @@ export default function SignPanel({ selectedKey, showKeyList }) {
       const data = mode === "text" ? message : fileBytes;
       const sig = await sign(data, privatePem);
       // sig is base64 of r||s
+      setBase64Signature(sig);
       if (sigFormat === "base64") setSignature(sig);
       else if (sigFormat === "hex") setSignature(signatureBase64ToHex(sig));
       else if (sigFormat === "der") setSignature(signatureBase64ToDER(sig));
@@ -123,8 +125,8 @@ export default function SignPanel({ selectedKey, showKeyList }) {
 
         {/* Mode toggle */}
         <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
-          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => { setMode("text"); setSignature(""); }} className="h-6 px-3 text-xs">{t('modeText')}</Button>
-          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => { setMode("file"); setSignature(""); }} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
+          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => { setMode("text"); setSignature(""); setBase64Signature(""); }} className="h-6 px-3 text-xs">{t('modeText')}</Button>
+          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => { setMode("file"); setSignature(""); setBase64Signature(""); }} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
         </div>
 
         {mode === "text" ? (
@@ -173,7 +175,21 @@ export default function SignPanel({ selectedKey, showKeyList }) {
             <div className="flex justify-between items-center mb-1">
               <Label className="text-xs font-medium text-muted-foreground">SIGNATURE ({sigFormat === "base64" ? "base64" : sigFormat === "hex" ? "hex" : "DER (base64)"})</Label>
               <div className="flex items-center gap-2">
-                <select className="text-xs p-1 rounded border" value={sigFormat} onChange={(e) => setSigFormat(e.target.value)}>
+                <select
+                  className="text-xs p-1 rounded border"
+                  value={sigFormat}
+                  onChange={(e) => {
+                    const newFormat = e.target.value;
+                    setSigFormat(newFormat);
+                    if (!base64Signature) {
+                      setSignature("");
+                      return;
+                    }
+                    if (newFormat === "base64") setSignature(base64Signature);
+                    else if (newFormat === "hex") setSignature(signatureBase64ToHex(base64Signature));
+                    else if (newFormat === "der") setSignature(signatureBase64ToDER(base64Signature));
+                  }}
+                >
                   <option value="base64">Base64 (r||s)</option>
                   <option value="hex">Hex</option>
                   <option value="der">DER</option>
