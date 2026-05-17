@@ -80,6 +80,8 @@ export default function DecryptPanel({ selectedKey, showKeyList }) {
       });
       toast.success(t('decryptSuccess'));
     } catch (e) {
+      setPlaintext("");
+      setDecryptedBytes(null);
       setWarning(t('decryptFail'));
       toast.error(t('decryptFail') + (e?.message ? (": " + e.message) : ""));
     } finally {
@@ -169,7 +171,7 @@ export default function DecryptPanel({ selectedKey, showKeyList }) {
             <Textarea
               placeholder={t('pasteCiphertextToDecrypt')}
               value={ciphertext}
-              onChange={(e) => { setCiphertext(e.target.value); setWarning(""); }}
+              onChange={(e) => { setCiphertext(e.target.value); setPlaintext(""); setDecryptedBytes(null); setWarning(""); }}
               className="mt-1 h-28 resize-none font-mono text-xs"
             />
           </div>
