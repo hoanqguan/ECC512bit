@@ -4,27 +4,31 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Unlock, Copy, CheckCircle2, Download, FileUp, X } from "lucide-react";
+import { Loader2, Unlock, Copy, CheckCircle2, Download, FileUp, X, Eye, EyeOff } from "lucide-react";
 import { decrypt, decryptToBytes } from "@/lib/brainpool";
 import { HistoryStore } from "@/lib/historyStore";
 import { toast } from "sonner";
+import { useT } from "@/lib/i18n";
 
-export default function DecryptPanel({ selectedKey }) {
+export default function DecryptPanel({ selectedKey, showKeyList }) {
+  const t = useT();
   const [mode, setMode] = useState("text"); // "text" | "file"
   const [ciphertext, setCiphertext] = useState("");
   const [plaintext, setPlaintext] = useState("");
   const [decryptedBytes, setDecryptedBytes] = useState(null);
   const [decryptedFileName, setDecryptedFileName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [blurred, setBlurred] = useState(true);
+  const [manualPrivate, setManualPrivate] = useState("");
   const [importedFile, setImportedFile] = useState(null);
-  const [sigFile, setSigFile] = useState(null);
+  const [warning, setWarning] = useState("");
   const jsonRef = useRef();
-  const sigRef = useRef();
 
   const switchMode = (m) => {
     setMode(m);
     setCiphertext(""); setPlaintext(""); setDecryptedBytes(null);
-    setImportedFile(null); setSigFile(null);
+    setImportedFile(null);
+    setWarning("");
   };
 
   const handleImportJson = (e) => {
@@ -37,13 +41,14 @@ export default function DecryptPanel({ selectedKey }) {
         const obj = JSON.parse(ev.target.result);
         if (obj.ciphertext) {
           setCiphertext(obj.ciphertext);
+          setWarning("");
           // Remember original file name for download
           if (obj.sourceFileName) setDecryptedFileName(obj.sourceFileName);
-          toast.success("Đã import ciphertext từ file JSON");
+          toast.success(t('importedEncJsonSuccess'));
         } else {
-          toast.error("File JSON không có trường ciphertext");
+          toast.error(t('invalidJsonMissingCiphertext'));
         }
-      } catch { toast.error("File không hợp lệ"); }
+      } catch { toast.error(t('invalidFile')); }
     };
     reader.readAsText(f);
   };
@@ -51,27 +56,35 @@ export default function DecryptPanel({ selectedKey }) {
   const clearImport = () => { setImportedFile(null); setCiphertext(""); jsonRef.current.value = ""; };
 
   const handleDecrypt = async () => {
-    if (!selectedKey) { toast.error("Select a key pair first"); return; }
-    if (mode === "file" && !ciphertext.trim()) { toast.error("Select a .enc.json file first"); return; }
-    if (mode === "text" && !ciphertext.trim()) { toast.error("Paste ciphertext to decrypt"); return; }
+    const privatePem = selectedKey?.private_key_pem || manualPrivate;
+    if (!privatePem) { setWarning(t('selectPrivateKeyFirst')); toast.error(t('selectPrivateKeyFirst')); return; }
+    if (mode === "file" && !ciphertext.trim()) { setWarning(t('selectEncJsonFirst')); toast.error(t('selectEncJsonFirst')); return; }
+    if (mode === "text" && !ciphertext.trim()) { setWarning(t('pasteCiphertextToDecrypt')); toast.error(t('pasteCiphertextToDecrypt')); return; }
     setLoading(true);
-    if (mode === "file") {
-      const bytes = await decryptToBytes(ciphertext.trim(), selectedKey.private_key_pem);
-      setDecryptedBytes(bytes);
-      setPlaintext("");
-    } else {
-      const result = await decrypt(ciphertext.trim(), selectedKey.private_key_pem);
-      setPlaintext(result);
-      setDecryptedBytes(null);
+    setWarning("");
+    try {
+      if (mode === "file") {
+        const bytes = await decryptToBytes(ciphertext.trim(), privatePem);
+        setDecryptedBytes(bytes);
+        setPlaintext("");
+      } else {
+        const result = await decrypt(ciphertext.trim(), privatePem);
+        setPlaintext(result);
+        setDecryptedBytes(null);
+      }
+      HistoryStore.add({
+        type: "decrypt",
+        keyName: selectedKey?.name || "manual key",
+        mode,
+        source: mode === "file" ? (importedFile ?? "file") : "text ciphertext",
+      });
+      toast.success(t('decryptSuccess'));
+    } catch (e) {
+      setWarning(t('decryptFail'));
+      toast.error(t('decryptFail') + (e?.message ? (": " + e.message) : ""));
+    } finally {
+      setLoading(false);
     }
-    HistoryStore.add({
-      type: "decrypt",
-      keyName: selectedKey.name,
-      mode,
-      source: mode === "file" ? (importedFile ?? "file") : "text ciphertext",
-    });
-    setLoading(false);
-    toast.success("Decrypted successfully");
   };
 
   const downloadPlaintext = () => {
@@ -97,26 +110,36 @@ export default function DecryptPanel({ selectedKey }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle className="text-base flex items-center gap-2">
           <Unlock className="w-4 h-4" />
-          Decrypt
+          {t('decrypt')}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        {!selectedKey && (
+          <div className="mt-2">
+            <Label className="text-xs font-medium">{t('insertPrivateKey')}</Label>
+            <Textarea placeholder={t('pastePrivateKeyPlaceholder')} value={manualPrivate} onChange={(e) => { setManualPrivate(e.target.value); setWarning(""); }} className="mt-1 h-20 resize-none font-mono text-xs" />
+          </div>
+        )}
         {selectedKey ? (
           <div className="flex items-center gap-2 p-2 bg-primary/5 rounded-lg">
             <CheckCircle2 className="w-4 h-4 text-primary" />
             <span className="text-sm font-medium">{selectedKey.name}</span>
-            <Badge variant="outline" className="text-xs ml-auto">Active Key</Badge>
+            <Badge variant="outline" className="text-xs ml-auto">{t('activeKey')}</Badge>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground italic">← Select a key pair from the list</p>
+          <p className="text-sm text-destructive italic cursor-pointer" onClick={() => { if (typeof showKeyList === 'function') showKeyList(); }} title={t('clickToChooseFile')}>
+            <span className="hidden sm:inline">←</span>
+            <span className="inline sm:hidden">↑</span>
+            {' '}{t('orSelectKeyPrompt')}
+          </p>
         )}
 
         {/* Mode toggle */}
         <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
-          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => switchMode("text")} className="h-6 px-3 text-xs">Text</Button>
-          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => switchMode("file")} className="h-6 px-3 text-xs">File</Button>
+          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => switchMode("text")} className="h-6 px-3 text-xs">{t('modeText')}</Button>
+          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => switchMode("file")} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
         </div>
 
         {mode === "file" ? (
@@ -127,7 +150,7 @@ export default function DecryptPanel({ selectedKey }) {
               {!importedFile ? (
                 <label className="flex flex-col items-center gap-2 border-2 border-dashed rounded-lg p-6 cursor-pointer hover:bg-muted/50 transition-colors">
                   <FileUp className="w-8 h-8 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Click để chọn file <code>.enc.json</code></span>
+                  <span className="text-sm text-muted-foreground">{t('clickToChooseFile')} <code>.enc.json</code></span>
                   <input ref={jsonRef} type="file" accept=".json" className="hidden" onChange={handleImportJson} />
                 </label>
               ) : (
@@ -142,20 +165,24 @@ export default function DecryptPanel({ selectedKey }) {
         ) : (
           /* Text mode: paste ciphertext */
           <div>
-            <Label className="text-xs font-medium">Ciphertext (base64)</Label>
+            <Label className="text-xs font-medium">{t('ciphertextLabel')}</Label>
             <Textarea
-              placeholder="Paste base64 ciphertext..."
+              placeholder={t('pasteCiphertextToDecrypt')}
               value={ciphertext}
-              onChange={(e) => setCiphertext(e.target.value)}
+              onChange={(e) => { setCiphertext(e.target.value); setWarning(""); }}
               className="mt-1 h-28 resize-none font-mono text-xs"
             />
           </div>
         )}
 
-        <Button onClick={handleDecrypt} disabled={loading || !selectedKey} className="w-full">
+        <Button onClick={handleDecrypt} disabled={loading || !(selectedKey || manualPrivate)} className="w-full">
           {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Unlock className="w-4 h-4 mr-2" />}
-          Decrypt {mode === "file" ? "File" : "Message"} (ECIES)
+          {t('decryptButton')} {mode === "file" ? t('modeFile') : t('modeText')} (ECIES)
         </Button>
+
+        {warning && (
+          <p className="text-xs text-destructive italic">{warning}</p>
+        )}
 
         {/* Text result */}
         {plaintext && mode === "text" && (
@@ -163,7 +190,10 @@ export default function DecryptPanel({ selectedKey }) {
             <div className="flex justify-between items-center mb-1">
               <Label className="text-xs font-medium text-muted-foreground">PLAINTEXT</Label>
               <div className="flex gap-1">
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { navigator.clipboard.writeText(plaintext); toast.success("Copied"); }}>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setBlurred(!blurred)} title={blurred ? "Show" : "Hide"}>
+                  {blurred ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                </Button>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { navigator.clipboard.writeText(plaintext); toast.success(t('copySuccess')); }}>
                   <Copy className="w-3 h-3" />
                 </Button>
                 <Button variant="ghost" size="icon" className="h-6 w-6" title="Tải về .txt" onClick={downloadPlaintext}>
@@ -171,7 +201,7 @@ export default function DecryptPanel({ selectedKey }) {
                 </Button>
               </div>
             </div>
-            <Textarea value={plaintext} readOnly className="text-xs font-mono h-24 resize-none bg-muted/50" />
+            <Textarea value={plaintext} readOnly className={`text-xs font-mono h-24 resize-none bg-muted/50 ${blurred ? "blur-sm" : ""}`} />
           </div>
         )}
 

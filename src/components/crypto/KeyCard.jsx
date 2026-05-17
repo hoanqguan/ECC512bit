@@ -10,11 +10,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Copy, Trash2, Key, ChevronDown, ChevronUp, Shield, Download, AlertTriangle } from "lucide-react";
 import { KeyStore } from "@/lib/localKeyStore";
+import { publicKeyPemToJWK, privateKeyPemToJWK } from "@/lib/brainpool";
 import { toast } from "sonner";
 
 export default function KeyCard({ keyPair, onDelete, onSelect, isSelected, onRefresh }) {
   const [expanded, setExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
   const importRef = useRef();
 
   const copy = (text, label) => {
@@ -22,24 +24,49 @@ export default function KeyCard({ keyPair, onDelete, onSelect, isSelected, onRef
     toast.success(`${label} copied`);
   };
 
-  const exportKey = () => {
-    const exportData = {
-      name: keyPair.name,
-      curve: keyPair.curve || "brainpoolP512r1",
-      public_key_pem: keyPair.public_key_pem,
-      private_key_pem: keyPair.private_key_pem,
-      fingerprint: keyPair.fingerprint,
-      notes: keyPair.notes || "",
-      exported_at: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `keypair_${keyPair.name.replace(/\s+/g, "_")}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("Key pair exported");
+  const exportKey = (format) => {
+    try {
+      const fmt = (format || 'jwk').toLowerCase();
+      if (fmt === 'pem') {
+        const pub = keyPair.public_key_pem || "";
+        const priv = keyPair.private_key_pem || "";
+        const combined = `${priv ? priv + "\n" : ""}${pub ? pub + "\n" : ""}`.trim();
+        if (!combined) throw new Error('No PEM data available for this key');
+        const blob = new Blob([combined], { type: 'application/x-pem-file' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `keypair_${keyPair.name.replace(/\s+/g, "_")}.pem`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast.success('Key pair exported as PEM');
+        return;
+      }
+
+      // default to JWK
+      const pubJwk = publicKeyPemToJWK(keyPair.public_key_pem);
+      const privJwk = privateKeyPemToJWK(keyPair.private_key_pem);
+      const exportData = {
+        name: keyPair.name,
+        curve: keyPair.curve || "brainpoolP512r1",
+        format: "jwk",
+        public_jwk: pubJwk,
+        private_jwk: privJwk,
+        fingerprint: keyPair.fingerprint,
+        notes: keyPair.notes || "",
+        exported_at: new Date().toISOString(),
+      };
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `keypair_${keyPair.name.replace(/\s+/g, "_")}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Key pair exported as JWK");
+    } catch (e) {
+      toast.error("Failed to export key: " + (e?.message || e));
+    }
   };
 
   return (
@@ -64,28 +91,51 @@ export default function KeyCard({ keyPair, onDelete, onSelect, isSelected, onRef
               </p>
             </div>
           </div>
+          <AlertDialog open={showExportDialog}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Export Key Pair</AlertDialogTitle>
+                <AlertDialogDescription>Chọn định dạng xuất cho key "{keyPair.name}"</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={(e) => { e.stopPropagation(); setShowExportDialog(false); }}>Hủy</AlertDialogCancel>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); exportKey('jwk'); setShowExportDialog(false); }}>Export JWK</Button>
+                  <Button size="sm" onClick={(e) => { e.stopPropagation(); exportKey('pem'); setShowExportDialog(false); }}>Export PEM</Button>
+                </div>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <div className="flex items-center gap-1">
             <Badge variant="secondary" className="text-xs font-mono">
               <Shield className="w-3 h-3 mr-1" />
               {keyPair.curve || "brainpoolP512r1"}
             </Badge>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              title="Export key pair"
-              onClick={(e) => { e.stopPropagation(); exportKey(); }}
-            >
-              <Download className="w-3.5 h-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-destructive hover:text-destructive"
-              onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(true); }}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </Button>
+            {isSelected && (
+              <Badge className="text-xs ml-2 bg-primary text-primary-foreground font-semibold">✓ Used</Badge>
+            )}
+            {!isSelected && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs gap-1"
+                  title="Export"
+                  onClick={(e) => { e.stopPropagation(); setShowExportDialog(true); }}
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Export</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-destructive hover:text-destructive"
+                  onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(true); }}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </>
+            )}
           </div>
         </div>
         {keyPair.fingerprint && (
@@ -137,7 +187,7 @@ export default function KeyCard({ keyPair, onDelete, onSelect, isSelected, onRef
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="w-5 h-5" /> Xóa Key Pair?
+              <AlertTriangle className="w-5 h-5" /> Delete Key Pair?
             </AlertDialogTitle>
             <AlertDialogDescription>
               Bạn sắp xóa key pair <strong>"{keyPair.name}"</strong>. Hành động này không thể hoàn tác. Dữ liệu đã mã hóa bằng key này sẽ không thể giải mã được nữa.

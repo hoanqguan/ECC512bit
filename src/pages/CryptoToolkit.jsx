@@ -12,6 +12,7 @@ import EncryptPanel from "@/components/crypto/EncryptPanel";
 import DecryptPanel from "@/components/crypto/DecryptPanel";
 import HistoryPanel from "@/components/crypto/HistoryPanel";
 import { HistoryStore } from "@/lib/historyStore";
+import { jwkToPublicKeyPem, jwkToPrivateKeyPem, computeFingerprint } from "@/lib/brainpool";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
@@ -21,6 +22,8 @@ export default function CryptoToolkit() {
   const [selectedKey, setSelectedKey] = useState(null);
   const [showGenerate, setShowGenerate] = useState(false);
   const [historyTick, setHistoryTick] = useState(0);
+  const [activeTab, setActiveTab] = useState("encrypt");
+  const [prevTab, setPrevTab] = useState(null);
 
   const [encryptText, setEncryptText] = useState("");
   const [decryptText, setDecryptText] = useState("");
@@ -36,35 +39,112 @@ export default function CryptoToolkit() {
   const navigate = useNavigate();
   const session = LocalAuth.getSession();
   const importRef = useRef();
+  const keyListRef = useRef();
 
   const handleImportKey = (e) => {
     const f = e.target.files[0];
     if (!f) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
+      const content = ev.target.result;
+      // Try JSON parse first (existing behavior)
       try {
-        const obj = JSON.parse(ev.target.result);
-        if (!obj.public_key_pem || !obj.private_key_pem) {
-          toast.error("File JSON không hợp lệ (thiếu public/private key)");
+        const obj = JSON.parse(content);
+        // Case 1: PEM export (format: "pem" or contains pem fields)
+        if (obj.public_key_pem || obj.private_key_pem || obj.format === "pem") {
+          KeyStore.create({
+            name: obj.name || "Imported Key",
+            curve: obj.curve || "brainpoolP512r1",
+            public_key_pem: obj.public_key_pem || "",
+            private_key_pem: obj.private_key_pem || "",
+            fingerprint: obj.fingerprint || "",
+            notes: obj.notes || "",
+          });
+          HistoryStore.add({ type: "keyimport", source: obj.name || "Imported Key", detail: obj.fingerprint ? `FP: ${obj.fingerprint.slice(0, 20)}…` : "`PEM`" });
+          loadKeys();
+          toast.success(`Key "${obj.name || "Imported Key"}" (PEM) đã được import`);
+          importRef.current.value = "";
           return;
         }
-        KeyStore.create({
-          name: obj.name || "Imported Key",
-          curve: obj.curve || "brainpoolP512r1",
-          public_key_pem: obj.public_key_pem,
-          private_key_pem: obj.private_key_pem,
-          fingerprint: obj.fingerprint || "",
-          notes: obj.notes || "",
-        });
-        HistoryStore.add({ type: "keyimport", source: obj.name || "Imported Key", detail: obj.fingerprint ? `FP: ${obj.fingerprint.slice(0, 20)}…` : "" });
-        loadKeys();
-        toast.success(`Key "${obj.name || "Imported Key"}" đã được import`);
-      } catch {
-        toast.error("Không thể đọc file JSON");
+
+        // Case 2: JWK export (format: "jwk" or contains public_jwk/private_jwk)
+        if (obj.public_jwk || obj.private_jwk || obj.format === "jwk" || obj.kty) {
+          let publicPem = "";
+          let privatePem = "";
+          if (obj.public_jwk) {
+            publicPem = jwkToPublicKeyPem(obj.public_jwk);
+          }
+          if (obj.private_jwk) {
+            privatePem = jwkToPrivateKeyPem(obj.private_jwk);
+          }
+          if (!obj.public_jwk && obj.kty && obj.x && obj.y) {
+            publicPem = jwkToPublicKeyPem(obj);
+          }
+          if (!obj.private_jwk && obj.kty && obj.d) {
+            privatePem = jwkToPrivateKeyPem(obj);
+          }
+
+          let fp = obj.fingerprint || "";
+          try {
+            if (!fp && publicPem) fp = await computeFingerprint(publicPem);
+          } catch {
+            // ignore fingerprint errors
+          }
+
+          KeyStore.create({
+            name: obj.name || obj.title || "Imported JWK",
+            curve: obj.curve || obj.crv || "brainpoolP512r1",
+            public_key_pem: publicPem,
+            private_key_pem: privatePem,
+            fingerprint: fp,
+            notes: obj.notes || "",
+          });
+          HistoryStore.add({ type: "keyimport", source: obj.name || "Imported JWK", detail: fp ? `FP: ${fp.slice(0, 20)}…` : "`JWK`" });
+          loadKeys();
+          toast.success(`Key "${obj.name || obj.title || "Imported JWK"}" (JWK) đã được import`);
+          importRef.current.value = "";
+          return;
+        }
+
+        toast.error("File JSON không hợp lệ để import key");
+        importRef.current.value = "";
+        return;
+      } catch (e) {
+        // Not JSON — try raw PEM text import
       }
+
+      // Detect PEM blocks (public and/or private). Accept various BEGIN/END labels.
+      try {
+        const pemText = String(content || "");
+        const pubMatch = pemText.match(/-----BEGIN[^-]*PUBLIC KEY-----[\s\S]*?-----END[^-]*PUBLIC KEY-----/i);
+        const privMatch = pemText.match(/-----BEGIN[^-]*PRIVATE KEY-----[\s\S]*?-----END[^-]*PRIVATE KEY-----/i);
+        if (pubMatch || privMatch) {
+          const publicPem = pubMatch ? pubMatch[0].trim() : "";
+          const privatePem = privMatch ? privMatch[0].trim() : "";
+          let fp = "";
+          try { if (publicPem) fp = await computeFingerprint(publicPem); } catch {}
+          KeyStore.create({
+            name: f.name ? f.name.replace(/\.[^/.]+$/, "") : "Imported PEM",
+            curve: "brainpoolP512r1",
+            public_key_pem: publicPem,
+            private_key_pem: privatePem,
+            fingerprint: fp,
+            notes: "",
+          });
+          HistoryStore.add({ type: "keyimport", source: f.name || "Imported PEM", detail: fp ? `FP: ${fp.slice(0, 20)}…` : "`PEM`" });
+          loadKeys();
+          toast.success(`Key "${f.name || "Imported PEM"}" (PEM) đã được import`);
+          importRef.current.value = "";
+          return;
+        }
+      } catch (e) {
+        // fall through to error
+      }
+
+      toast.error("File không hợp lệ để import key (JSON hoặc PEM được chấp nhận)");
+      importRef.current.value = "";
     };
     reader.readAsText(f);
-    importRef.current.value = "";
   };
 
   const handleLogout = () => {
@@ -90,6 +170,7 @@ export default function CryptoToolkit() {
 
   const handleSelect = (key) => {
     setSelectedKey((prev) => prev?.id === key.id ? null : key);
+    setLoading(false);
   };
 
   return (
@@ -107,16 +188,12 @@ export default function CryptoToolkit() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {session && (
-              <span className="text-sm text-muted-foreground hidden sm:inline">
-                👤 {session.username}
-              </span>
-            )}
-            <Button onClick={() => setShowGenerate(true)} size="sm" className="gap-1.5">
-              <Plus className="w-4 h-4" />
-              New Key Pair
-            </Button>
             <Button onClick={handleLogout} size="sm" variant="outline" className="gap-1.5">
+              {session && (
+                <span className="text-sm font-semibold text-foreground hidden sm:inline mr-1">
+                  👤 {session.username}
+                </span>
+              )}
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">Logout</span>
             </Button>
@@ -127,14 +204,18 @@ export default function CryptoToolkit() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Key list */}
-          <div className="lg:col-span-1">
+          <div ref={keyListRef} className="lg:col-span-1">
             <div className="flex items-center gap-2 mb-3">
               <KeyRound className="w-4 h-4 text-muted-foreground" />
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                 Saved Key Pairs
               </h2>
               <span className="text-xs text-muted-foreground">{keyPairs.length}</span>
-              <label className="ml-auto cursor-pointer" title="Import key pair từ JSON">
+              <Button onClick={() => setShowGenerate(true)} size="sm" variant="outline" className="h-7 ml-auto gap-1.5">
+                <Plus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline text-xs">New Key</span>
+              </Button>
+              <label className="cursor-pointer" title="Import key pair từ JSON">
                 <Button size="icon" variant="outline" className="h-7 w-7" asChild>
                   <span><Upload className="w-3.5 h-3.5" /></span>
                 </Button>
@@ -171,7 +252,7 @@ export default function CryptoToolkit() {
 
           {/* Operations */}
           <div className="lg:col-span-2">
-            <Tabs defaultValue="encrypt" onValueChange={(v) => { if (v === "history") refreshHistory(); }}>
+              <Tabs value={activeTab} onValueChange={(v) => { setPrevTab(activeTab); setActiveTab(v); if (v === "history") refreshHistory(); }}>
               <TabsList className="mb-6 grid grid-cols-5 bg-slate-800 border border-slate-700 rounded-2xl p-1 h-auto">
                 <TabsTrigger value="encrypt" className="rounded-xl data-[state=active]:bg-cyan-500 data-[state=active]:text-black font-semibold transition-all">Encrypt</TabsTrigger>
                 <TabsTrigger value="decrypt" className="rounded-xl data-[state=active]:bg-cyan-500 data-[state=active]:text-black font-semibold transition-all">Decrypt</TabsTrigger>
@@ -180,16 +261,26 @@ export default function CryptoToolkit() {
                 <TabsTrigger value="history" className="rounded-xl data-[state=active]:bg-cyan-500 data-[state=active]:text-black font-semibold transition-all">History</TabsTrigger>
               </TabsList>
               <TabsContent value="encrypt" className="overflow-visible">
-                <EncryptPanel selectedKey={selectedKey} text={encryptText} setText={setEncryptText} mode={encryptMode} setMode={setEncryptMode} />
+                <EncryptPanel selectedKey={selectedKey} text={encryptText} setText={setEncryptText} mode={encryptMode} setMode={setEncryptMode} showKeyList={() => {
+                  if (keyListRef.current) {
+                    keyListRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }
+                }} />
               </TabsContent>
               <TabsContent value="decrypt" className="overflow-visible">
-                <DecryptPanel selectedKey={selectedKey} text={decryptText} setText={setDecryptText} mode={decryptMode} setMode={setDecryptMode} />
+                <DecryptPanel selectedKey={selectedKey} text={decryptText} setText={setDecryptText} mode={decryptMode} setMode={setDecryptMode} showKeyList={() => {
+                  if (keyListRef.current) keyListRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+                }} />
               </TabsContent>
               <TabsContent value="sign" className="overflow-visible">
-                <SignPanel selectedKey={selectedKey} text={signText} setText={setSignText} mode={signMode} setMode={setSignMode} />
+                <SignPanel selectedKey={selectedKey} text={signText} setText={setSignText} mode={signMode} setMode={setSignMode} showKeyList={() => {
+                  if (keyListRef.current) keyListRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+                }} />
               </TabsContent>
               <TabsContent value="verify" className="overflow-visible">
-                <VerifyPanel selectedKey={selectedKey} text={verifyText} setText={setVerifyText} mode={verifyMode} setMode={setVerifyMode} />
+                <VerifyPanel selectedKey={selectedKey} text={verifyText} setText={setVerifyText} mode={verifyMode} setMode={setVerifyMode} showKeyList={() => {
+                  if (keyListRef.current) keyListRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+                }} />
               </TabsContent>
               <TabsContent value="history" className="overflow-visible">
                 <HistoryPanel refreshTrigger={historyTick} />

@@ -8,12 +8,13 @@ import { Loader2, Lock, Copy, CheckCircle2, Download, Eye, EyeOff, FileUp, X } f
 import { encrypt, encryptBytes } from "@/lib/brainpool";
 import { HistoryStore } from "@/lib/historyStore";
 import { toast } from "sonner";
+import { useT } from "@/lib/i18n";
 
 function FileDropZone({ file, fileRef, onFileChange, onClear }) {
   return !file ? (
     <label className="flex flex-col items-center gap-2 border-2 border-dashed rounded-lg p-5 cursor-pointer hover:bg-muted/50 transition-colors">
       <FileUp className="w-7 h-7 text-muted-foreground" />
-      <span className="text-sm text-muted-foreground">Click để chọn file</span>
+      <span className="text-sm text-muted-foreground">{t('clickToChooseFile')}</span>
       <input ref={fileRef} type="file" className="hidden" onChange={onFileChange} />
     </label>
   ) : (
@@ -26,7 +27,8 @@ function FileDropZone({ file, fileRef, onFileChange, onClear }) {
   );
 }
 
-export default function EncryptPanel({ selectedKey }) {
+export default function EncryptPanel({ selectedKey, showKeyList }) {
+  const t = useT();
   const [mode, setMode] = useState("text"); // "text" | "file"
   const [plaintext, setPlaintext] = useState("");
   const [file, setFile] = useState(null);
@@ -34,14 +36,17 @@ export default function EncryptPanel({ selectedKey }) {
   const [ciphertext, setCiphertext] = useState("");
   const [loading, setLoading] = useState(false);
   const [blurred, setBlurred] = useState(true);
+  const [manualPublic, setManualPublic] = useState("");
+  const [warning, setWarning] = useState("");
   const fileRef = useRef();
 
-  const switchMode = (m) => { setMode(m); setCiphertext(""); setFile(null); setFileBytes(null); setPlaintext(""); };
+  const switchMode = (m) => { setMode(m); setCiphertext(""); setFile(null); setFileBytes(null); setPlaintext(""); setWarning(""); };
 
   const handleFileChange = (e) => {
     const f = e.target.files[0];
     if (!f) return;
     setFile(f);
+    setWarning("");
     const reader = new FileReader();
     reader.onload = (ev) => setFileBytes(new Uint8Array(ev.target.result));
     reader.readAsArrayBuffer(f);
@@ -50,29 +55,37 @@ export default function EncryptPanel({ selectedKey }) {
   const clearFile = () => { setFile(null); setFileBytes(null); fileRef.current.value = ""; setCiphertext(""); };
 
   const handleEncrypt = async () => {
-    if (!selectedKey) { toast.error("Select a key pair first"); return; }
-    if (mode === "text" && !plaintext.trim()) { toast.error("Enter a message to encrypt"); return; }
-    if (mode === "file" && !fileBytes) { toast.error("Select a file to encrypt"); return; }
+    const publicPem = selectedKey?.public_key_pem || manualPublic;
+    if (!publicPem) { setWarning(t('selectPublicKeyFirst')); toast.error(t('selectPublicKeyFirst')); return; }
+    if (mode === "text" && !plaintext.trim()) { setWarning(t('enterPlaintext')); toast.error(t('enterPlaintext')); return; }
+    if (mode === "file" && !fileBytes) { setWarning(t('selectFileToEncrypt')); toast.error(t('selectFileToEncrypt')); return; }
     setLoading(true);
-    const ct = mode === "text"
-      ? await encrypt(plaintext, selectedKey.public_key_pem)
-      : await encryptBytes(fileBytes, selectedKey.public_key_pem);
-    setCiphertext(ct);
-    setBlurred(true);
-    HistoryStore.add({
-      type: "encrypt",
-      keyName: selectedKey.name,
-      mode,
-      source: mode === "file" ? file?.name : "text message",
-    });
-    setLoading(false);
-    toast.success("Encrypted successfully");
+    setWarning("");
+    try {
+      const ct = mode === "text"
+        ? await encrypt(plaintext, publicPem)
+        : await encryptBytes(fileBytes, publicPem);
+      setCiphertext(ct);
+      setBlurred(true);
+      HistoryStore.add({
+        type: "encrypt",
+        keyName: selectedKey?.name || "manual key",
+        mode,
+        source: mode === "file" ? file?.name : "text message",
+      });
+      toast.success(t('encryptSuccess'));
+    } catch (e) {
+      setWarning(t('encryptFail'));
+      toast.error(t('encryptFail') + (e?.message ? (": " + e.message) : ""));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const downloadJson = () => {
     const obj = {
       algorithm: "ECIES-BrainpoolP512r1-AES256CBC-HMACSHA512",
-      keyFingerprint: selectedKey?.fingerprint || "",
+      keyFingerprint: selectedKey?.fingerprint || "manual-key",
       sourceType: mode,
       sourceFileName: mode === "file" ? file?.name : undefined,
       ciphertext,
@@ -97,29 +110,39 @@ export default function EncryptPanel({ selectedKey }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        {!selectedKey && (
+          <div className="mt-2">
+            <Label className="text-xs font-medium">{t('insertPublicKey')}</Label>
+            <Textarea placeholder={t('pastePublicKeyPlaceholder')} value={manualPublic} onChange={(e) => { setManualPublic(e.target.value); setWarning(""); }} className="mt-1 h-20 resize-none font-mono text-xs" />
+          </div>
+        )}
         {selectedKey ? (
           <div className="flex items-center gap-2 p-2 bg-primary/5 rounded-lg">
             <CheckCircle2 className="w-4 h-4 text-primary" />
             <span className="text-sm font-medium">{selectedKey.name}</span>
-            <Badge variant="outline" className="text-xs ml-auto">Active Key</Badge>
+            <Badge variant="outline" className="text-xs ml-auto">{t('activeKey')}</Badge>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground italic">← Select a key pair from the list</p>
+          <p className="text-sm text-destructive italic cursor-pointer" onClick={() => { if (typeof showKeyList === 'function') showKeyList(); }} title={t('clickToChooseFile')}>
+            <span className="hidden sm:inline">←</span>
+            <span className="inline sm:hidden">↑</span>
+            {' '}{t('orSelectKeyPrompt')}
+          </p>
         )}
 
         {/* Mode toggle */}
         <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
-          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => switchMode("text")} className="h-6 px-3 text-xs">Text</Button>
-          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => switchMode("file")} className="h-6 px-3 text-xs">File</Button>
+          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => switchMode("text")} className="h-6 px-3 text-xs">{t('modeText')}</Button>
+          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => switchMode("file")} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
         </div>
 
         {mode === "text" ? (
           <div>
-            <Label className="text-xs font-medium">Plaintext</Label>
+            <Label className="text-xs font-medium">{t('plaintext')}</Label>
             <Textarea
-              placeholder="Enter the message to encrypt..."
+              placeholder={t('enterMessagePlaceholder')}
               value={plaintext}
-              onChange={(e) => setPlaintext(e.target.value)}
+              onChange={(e) => { setPlaintext(e.target.value); setWarning(""); }}
               className="mt-1 h-28 resize-none font-mono text-sm"
             />
           </div>
@@ -132,23 +155,27 @@ export default function EncryptPanel({ selectedKey }) {
           </div>
         )}
 
-        <Button onClick={handleEncrypt} disabled={loading || !selectedKey} className="w-full">
+        <Button onClick={handleEncrypt} disabled={loading || !(selectedKey || manualPublic)} className="w-full">
           {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lock className="w-4 h-4 mr-2" />}
-          Encrypt {mode === "file" ? "File" : "Message"} (ECIES)
+          {t('encryptButton')} {mode === "file" ? t('modeFile') : t('modeText')} (ECIES)
         </Button>
+
+        {warning && (
+          <p className="text-xs text-destructive italic">{warning}</p>
+        )}
 
         {ciphertext && (
           <div>
             <div className="flex justify-between items-center mb-1">
-              <Label className="text-xs font-medium text-muted-foreground">CIPHERTEXT (base64)</Label>
+              <Label className="text-xs font-medium text-muted-foreground">{t('ciphertextLabel')}</Label>
               <div className="flex gap-1">
                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setBlurred(!blurred)}>
                   {blurred ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
                 </Button>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { navigator.clipboard.writeText(ciphertext); toast.success("Copied"); }}>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { navigator.clipboard.writeText(ciphertext); toast.success(t('copySuccess')); }}>
                   <Copy className="w-3 h-3" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-6 w-6" title="Tải về .enc.json" onClick={downloadJson}>
+                <Button variant="ghost" size="icon" className="h-6 w-6" title={t('downloadEncJsonTitle')} onClick={downloadJson}>
                   <Download className="w-3 h-3" />
                 </Button>
               </div>
@@ -163,14 +190,12 @@ export default function EncryptPanel({ selectedKey }) {
               {blurred && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => setBlurred(false)}>
-                    <Eye className="w-3 h-3" /> Nhấn để hiện
+                    <Eye className="w-3 h-3" /> {t('revealBtn')}
                   </Button>
                 </div>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Nút <Download className="w-3 h-3 inline mx-0.5" /> tải về file <code>.enc.json</code> chứa ciphertext.
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">{t('downloadCiphertextNote')}</p>
           </div>
         )}
       </CardContent>

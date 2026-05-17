@@ -185,6 +185,156 @@ export function generateAndExportKeyPair() {
   };
 }
 
+// ---- JWK import/export helpers ----
+
+function toBase64Url(bytes) {
+  return uint8ArrayToBase64(bytes).replace(/=+$/, "");
+}
+
+function fromBase64Url(b64u) {
+  // reuse base64ToUint8Array which normalizes -/_ to +/
+  return base64ToUint8Array(b64u);
+}
+
+function publicKeyPemToJWK(publicKeyPem) {
+  const pubBytes = fromPEM("BRAINPOOL P512 PUBLIC KEY", publicKeyPem);
+  const Q = decodePublicKey(pubBytes);
+  const x = bigIntToBytes(Q.x, 64);
+  const y = bigIntToBytes(Q.y, 64);
+  return {
+    kty: "EC",
+    crv: "brainpoolP512r1",
+    x: toBase64Url(x),
+    y: toBase64Url(y),
+  };
+}
+
+function privateKeyPemToJWK(privateKeyPem) {
+  const privBytes = fromPEM("BRAINPOOL P512 PRIVATE KEY", privateKeyPem);
+  const d = privBytes; // raw bytes
+  return {
+    kty: "EC",
+    crv: "brainpoolP512r1",
+    d: toBase64Url(d),
+  };
+}
+
+function jwkToPublicKeyPem(jwk) {
+  if (jwk.kty !== "EC") throw new Error("Only EC JWK supported");
+  const x = fromBase64Url(jwk.x);
+  const y = fromBase64Url(jwk.y);
+  const bytes = new Uint8Array(1 + x.length + y.length);
+  bytes[0] = 0x04;
+  bytes.set(x, 1);
+  bytes.set(y, 1 + x.length);
+  return toPEM("BRAINPOOL P512 PUBLIC KEY", bytes);
+}
+
+function jwkToPrivateKeyPem(jwk) {
+  if (jwk.kty !== "EC") throw new Error("Only EC JWK supported");
+  const d = fromBase64Url(jwk.d);
+  return toPEM("BRAINPOOL P512 PRIVATE KEY", d);
+}
+
+// ---- Signature format conversions (base64 r||s <-> hex, DER, (r,s) JSON) ----
+
+function bytesToHex(bytes) {
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function hexToBytes(hex) {
+  if (hex.length % 2 === 1) hex = "0" + hex;
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+function bigintToDERInteger(n) {
+  if (n === 0n) return new Uint8Array([0x02, 0x01, 0x00]);
+  let hex = n.toString(16);
+  if (hex.length % 2) hex = "0" + hex;
+  let bytes = hex.match(/.{1,2}/g).map((h) => parseInt(h, 16));
+  // remove leading zeros
+  while (bytes.length > 1 && bytes[0] === 0x00) bytes.shift();
+  // if highest bit set, prefix 0x00 to indicate unsigned integer
+  if (bytes[0] & 0x80) bytes = [0x00, ...bytes];
+  const len = bytes.length;
+  return new Uint8Array([0x02, len, ...bytes]);
+}
+
+function rsToDER(r, s) {
+  const rInt = bigintToDERInteger(r);
+  const sInt = bigintToDERInteger(s);
+  const seqLen = rInt.length + sInt.length;
+  const out = new Uint8Array(2 + seqLen);
+  out[0] = 0x30; // SEQUENCE
+  out[1] = seqLen;
+  out.set(rInt, 2);
+  out.set(sInt, 2 + rInt.length);
+  return out;
+}
+
+function derToRS(derBytes) {
+  // very small DER parser for sequence(INTEGER r, INTEGER s)
+  if (derBytes[0] !== 0x30) throw new Error("Invalid DER sequence");
+  const seqLen = derBytes[1];
+  let idx = 2;
+  if (derBytes[idx] !== 0x02) throw new Error("Missing INTEGER for r");
+  const rLen = derBytes[idx + 1];
+  const rBytes = derBytes.slice(idx + 2, idx + 2 + rLen);
+  idx = idx + 2 + rLen;
+  if (derBytes[idx] !== 0x02) throw new Error("Missing INTEGER for s");
+  const sLen = derBytes[idx + 1];
+  const sBytes = derBytes.slice(idx + 2, idx + 2 + sLen);
+  // remove possible leading 0x00
+  const rClean = rBytes[0] === 0x00 ? rBytes.slice(1) : rBytes;
+  const sClean = sBytes[0] === 0x00 ? sBytes.slice(1) : sBytes;
+  const r = bytesToBigInt(new Uint8Array(64 - rClean.length).fill(0).concat(Array.from(rClean)));
+  const s = bytesToBigInt(new Uint8Array(64 - sClean.length).fill(0).concat(Array.from(sClean)));
+  return { r, s };
+}
+
+function signatureBase64ToHex(sigB64) {
+  const bytes = base64ToUint8Array(sigB64);
+  return bytesToHex(bytes);
+}
+
+function signatureHexToBase64(sigHex) {
+  const bytes = hexToBytes(sigHex);
+  return uint8ArrayToBase64(bytes);
+}
+
+function signatureBase64ToDER(sigB64) {
+  const bytes = base64ToUint8Array(sigB64);
+  if (bytes.length !== 128) throw new Error("Invalid signature length");
+  const r = bytesToBigInt(bytes.slice(0, 64));
+  const s = bytesToBigInt(bytes.slice(64, 128));
+  const der = rsToDER(r, s);
+  // return base64 url-safe
+  return uint8ArrayToBase64(der);
+}
+
+function signatureDERToBase64(derB64) {
+  const derBytes = base64ToUint8Array(derB64);
+  const { r, s } = derToRS(derBytes);
+  const rBytes = bigIntToBytes(r, 64);
+  const sBytes = bigIntToBytes(s, 64);
+  const out = new Uint8Array(128);
+  out.set(rBytes, 0);
+  out.set(sBytes, 64);
+  return uint8ArrayToBase64(out);
+}
+
+function signatureHexToDER(hex) {
+  const b64 = signatureHexToBase64(hex);
+  return signatureBase64ToDER(b64);
+}
+
+function signatureDERToHex(derB64) {
+  const b64 = signatureDERToBase64(derB64);
+  return signatureBase64ToHex(b64);
+}
+
 // ---- SHA-512 hash ----
 
 async function sha512(data) {
@@ -443,4 +593,22 @@ async function decryptToBytes(ciphertextB64, privateKeyPem) {
   return new Uint8Array(plainBuf);
 }
 
-export { sign, verify, computeFingerprint, encrypt, encryptBytes, decrypt, decryptToBytes };
+export {
+  sign,
+  verify,
+  computeFingerprint,
+  encrypt,
+  encryptBytes,
+  decrypt,
+  decryptToBytes,
+  publicKeyPemToJWK,
+  privateKeyPemToJWK,
+  jwkToPublicKeyPem,
+  jwkToPrivateKeyPem,
+  signatureBase64ToHex,
+  signatureHexToBase64,
+  signatureBase64ToDER,
+  signatureDERToBase64,
+  signatureHexToDER,
+  signatureDERToHex,
+};

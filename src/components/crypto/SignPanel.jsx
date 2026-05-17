@@ -5,24 +5,30 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, PenLine, Copy, CheckCircle2, FileUp, X, Download, Eye, EyeOff } from "lucide-react";
-import { sign } from "@/lib/brainpool";
+import { sign, signatureBase64ToHex, signatureBase64ToDER } from "@/lib/brainpool";
 import { HistoryStore } from "@/lib/historyStore";
 import { toast } from "sonner";
+import { useT } from "@/lib/i18n";
 
-export default function SignPanel({ selectedKey }) {
+export default function SignPanel({ selectedKey, showKeyList }) {
+  const t = useT();
   const [mode, setMode] = useState("text");
   const [message, setMessage] = useState("");
   const [file, setFile] = useState(null);
   const [fileBytes, setFileBytes] = useState(null);
   const [signature, setSignature] = useState("");
+  const [sigFormat, setSigFormat] = useState("hex");
   const [loading, setLoading] = useState(false);
   const [blurred, setBlurred] = useState(true);
+  const [manualPrivate, setManualPrivate] = useState("");
+  const [warning, setWarning] = useState("");
   const fileRef = useRef();
 
   const handleFileChange = (e) => {
     const f = e.target.files[0];
     if (!f) return;
     setFile(f);
+    setWarning("");
     const reader = new FileReader();
     reader.onload = (ev) => setFileBytes(new Uint8Array(ev.target.result));
     reader.readAsArrayBuffer(f);
@@ -31,30 +37,53 @@ export default function SignPanel({ selectedKey }) {
   const clearFile = () => { setFile(null); setFileBytes(null); fileRef.current.value = ""; };
 
   const handleSign = async () => {
-    if (!selectedKey) { toast.error("Select a key pair first"); return; }
-    if (mode === "text" && !message.trim()) { toast.error("Enter a message to sign"); return; }
-    if (mode === "file" && !fileBytes) { toast.error("Select a file to sign"); return; }
+    const privatePem = selectedKey?.private_key_pem || manualPrivate;
+    if (!privatePem) { setWarning(t('selectPrivateKeySignFirst')); toast.error(t('selectPrivateKeySignFirst')); return; }
+    if (mode === "text" && !message.trim()) { setWarning(t('enterMessageToSign')); toast.error(t('enterMessageToSign')); return; }
+    if (mode === "file" && !fileBytes) { setWarning(t('selectFileToSign')); toast.error(t('selectFileToSign')); return; }
     setLoading(true);
-    const data = mode === "text" ? message : fileBytes;
-    const sig = await sign(data, selectedKey.private_key_pem);
-    setSignature(sig);
-    setBlurred(true);
-    HistoryStore.add({
-      type: "sign",
-      keyName: selectedKey.name,
-      mode,
-      source: mode === "file" ? file.name : "text message",
-    });
-    setLoading(false);
-    toast.success("Signed successfully");
+    setWarning("");
+    try {
+      const data = mode === "text" ? message : fileBytes;
+      const sig = await sign(data, privatePem);
+      // sig is base64 of r||s
+      if (sigFormat === "base64") setSignature(sig);
+      else if (sigFormat === "hex") setSignature(signatureBase64ToHex(sig));
+      else if (sigFormat === "der") setSignature(signatureBase64ToDER(sig));
+      setBlurred(true);
+      HistoryStore.add({
+        type: "sign",
+        keyName: selectedKey?.name || "manual key",
+        mode,
+        source: mode === "file" ? file.name : "text message",
+      });
+      toast.success(t('signSuccess'));
+    } catch (e) {
+      setWarning(t('signFail'));
+      toast.error(t('signFail') + (e?.message ? (": " + e.message) : ""));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const downloadSig = () => {
-    const blob = new Blob([signature], { type: "text/plain" });
+    let blob;
+    if (sigFormat === "base64" || sigFormat === "hex") {
+      blob = new Blob([signature], { type: "text/plain" });
+    } else {
+      // DER: signature stored as base64 DER
+      const derB64 = signature;
+      const binary = atob(derB64.replace(/-/g, "+").replace(/_/g, "/"));
+      const arr = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+      blob = new Blob([arr], { type: "application/octet-stream" });
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${(mode === "file" ? file.name : "message").replace(/\.[^.]+$/, "")}.sig`;
+    const baseName = (mode === "file" ? file.name : "message").replace(/\.[^.]+$/, "");
+    const ext = sigFormat === "der" ? ".der" : ".sig";
+    a.download = `${baseName}${ext}`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -64,33 +93,47 @@ export default function SignPanel({ selectedKey }) {
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <PenLine className="w-4 h-4" />
-          Sign
+          {t('sign')}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* Mode toggle */}
-        <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
-          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => { setMode("text"); setSignature(""); }} className="h-6 px-3 text-xs">Text</Button>
-          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => { setMode("file"); setSignature(""); }} className="h-6 px-3 text-xs">File</Button>
-        </div>
-
+        {!selectedKey && (
+          <div className="mt-2">
+            <Label className="text-xs font-medium">{t('insertPrivateKeySign')}</Label>
+            <Textarea placeholder={t('pastePrivateKeyPlaceholder')} value={manualPrivate} onChange={(e) => { setManualPrivate(e.target.value); setWarning(""); }} className="mt-1 h-20 resize-none font-mono text-xs" />
+          </div>
+        )}
         {selectedKey ? (
           <div className="flex items-center gap-2 p-2 bg-primary/5 rounded-lg">
             <CheckCircle2 className="w-4 h-4 text-primary" />
             <span className="text-sm font-medium">{selectedKey.name}</span>
-            <Badge variant="outline" className="text-xs ml-auto">Active Key</Badge>
+            <Badge variant="outline" className="text-xs ml-auto">{t('activeKey')}</Badge>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground italic">← Select a key pair from the list</p>
+          <p
+            className="text-sm text-destructive italic cursor-pointer"
+            onClick={() => { if (typeof showKeyList === 'function') showKeyList(); }}
+            title={t('clickToChooseFile')}
+          >
+            <span className="hidden sm:inline">←</span>
+            <span className="inline sm:hidden">↑</span>
+            {' '}{t('orSelectKeyPrompt')}
+          </p>
         )}
+
+        {/* Mode toggle */}
+        <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
+          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => { setMode("text"); setSignature(""); }} className="h-6 px-3 text-xs">{t('modeText')}</Button>
+          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => { setMode("file"); setSignature(""); }} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
+        </div>
 
         {mode === "text" ? (
           <div>
-            <Label className="text-xs font-medium">Message</Label>
+            <Label className="text-xs font-medium">{t('messageLabel')}</Label>
             <Textarea
-              placeholder="Enter the message to sign..."
+              placeholder={t('enterMessageToSign')}
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => { setMessage(e.target.value); setWarning(""); }}
               className="mt-1 h-28 resize-none font-mono text-sm"
             />
           </div>
@@ -116,25 +159,36 @@ export default function SignPanel({ selectedKey }) {
           </div>
         )}
 
-        <Button onClick={handleSign} disabled={loading || !selectedKey} className="w-full">
+        <Button onClick={handleSign} disabled={loading || !(selectedKey || manualPrivate)} className="w-full">
           {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PenLine className="w-4 h-4 mr-2" />}
-          Sign {mode === "file" ? "File" : "Message"}
+          {t('signButton')} {mode === "file" ? t('modeFile') : t('modeText')}
         </Button>
+
+        {warning && (
+          <p className="text-xs text-destructive italic">{warning}</p>
+        )}
 
         {signature && (
           <div>
             <div className="flex justify-between items-center mb-1">
-              <Label className="text-xs font-medium text-muted-foreground">SIGNATURE (base64)</Label>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setBlurred(!blurred)}>
-                  {blurred ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                </Button>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { navigator.clipboard.writeText(signature); toast.success("Copied"); }}>
-                  <Copy className="w-3 h-3" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={downloadSig}>
-                  <Download className="w-3 h-3" />
-                </Button>
+              <Label className="text-xs font-medium text-muted-foreground">SIGNATURE ({sigFormat === "base64" ? "base64" : sigFormat === "hex" ? "hex" : "DER (base64)"})</Label>
+              <div className="flex items-center gap-2">
+                <select className="text-xs p-1 rounded border" value={sigFormat} onChange={(e) => setSigFormat(e.target.value)}>
+                  <option value="base64">Base64 (r||s)</option>
+                  <option value="hex">Hex</option>
+                  <option value="der">DER</option>
+                </select>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setBlurred(!blurred)}>
+                    {blurred ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { navigator.clipboard.writeText(signature); toast.success(t('copySuccess')); }}>
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={downloadSig}>
+                    <Download className="w-3 h-3" />
+                  </Button>
+                </div>
               </div>
             </div>
             <div className="relative">
@@ -147,7 +201,7 @@ export default function SignPanel({ selectedKey }) {
               {blurred && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => setBlurred(false)}>
-                    <Eye className="w-3 h-3" /> Nhấn để hiện
+                    <Eye className="w-3 h-3" /> {t('revealBtn')}
                   </Button>
                 </div>
               )}

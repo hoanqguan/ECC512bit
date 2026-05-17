@@ -8,6 +8,7 @@ import {
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { HistoryStore } from "@/lib/historyStore";
+import { useT } from "@/lib/i18n";
 import { History, Trash2, Lock, Unlock, PenLine, ShieldCheck, Key, AlertTriangle } from "lucide-react";
 
 const TYPE_CONFIG = {
@@ -41,6 +42,7 @@ function ConfirmDialog({ open, title, description, onConfirm, onCancel }) {
 }
 
 export default function HistoryPanel({ refreshTrigger }) {
+  const t = useT();
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState("all");
   const [confirmDelete, setConfirmDelete] = useState(null); // { id } or "all"
@@ -48,6 +50,15 @@ export default function HistoryPanel({ refreshTrigger }) {
   const load = () => setItems(HistoryStore.list());
 
   useEffect(() => { load(); }, [refreshTrigger]);
+
+  const TYPE_CONFIG = {
+    encrypt:   { label: t('encrypt'),     icon: Lock,        color: "bg-blue-50 text-blue-700 border-blue-200" },
+    decrypt:   { label: t('decrypt'),     icon: Unlock,      color: "bg-purple-50 text-purple-700 border-purple-200" },
+    sign:      { label: t('sign'),        icon: PenLine,     color: "bg-amber-50 text-amber-700 border-amber-200" },
+    verify:    { label: t('verify'),      icon: ShieldCheck, color: "bg-green-50 text-green-700 border-green-200" },
+    keygen:    { label: t('newKey'), icon: Key,         color: "bg-primary/5 text-primary border-primary/20" },
+    keyimport: { label: t('newKey'),icon: Key,         color: "bg-primary/5 text-primary border-primary/20" },
+  };
 
   const filtered = filter === "all" ? items : items.filter((h) => h.type === filter);
 
@@ -68,15 +79,15 @@ export default function HistoryPanel({ refreshTrigger }) {
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <History className="w-4 h-4" />
-          Operation History
+          {t('operationHistory')}
           <Badge variant="secondary" className="ml-1 text-xs">{items.length}</Badge>
           {items.length > 0 && (
-            <Button
+              <Button
               size="sm" variant="destructive"
               className="ml-auto h-7 px-3 text-xs gap-1"
               onClick={() => setConfirmDelete("all")}
             >
-              <Trash2 className="w-3 h-3" /> Xóa tất cả
+              <Trash2 className="w-3 h-3" /> {t('deleteAll')}
             </Button>
           )}
         </CardTitle>
@@ -92,13 +103,13 @@ export default function HistoryPanel({ refreshTrigger }) {
               className="h-6 px-2 text-xs capitalize"
               onClick={() => setFilter(f)}
             >
-              {f === "all" ? "Tất cả" : TYPE_CONFIG[f]?.label ?? f}
+              {f === "all" ? t('filterAll') : TYPE_CONFIG[f]?.label ?? f}
             </Button>
           ))}
         </div>
 
         {filtered.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic text-center py-8">Chưa có thao tác nào được ghi lại.</p>
+          <p className="text-sm text-muted-foreground italic text-center py-8">{t('noHistory')}</p>
         ) : (
           <div className="space-y-2">
             {filtered.map((h) => {
