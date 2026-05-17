@@ -130,8 +130,8 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
 
         {/* Mode toggle */}
         <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
-          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => { setMode("text"); setResult(null); }} className="h-6 px-3 text-xs">{t('modeText')}</Button>
-          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => { setMode("file"); setResult(null); }} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
+          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => { setMode("text"); setResult(null); setSignature(""); setSigFileName(null); if (sigRef.current) sigRef.current.value = ""; }} className="h-6 px-3 text-xs">{t('modeText')}</Button>
+          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => { setMode("file"); setResult(null); setSignature(""); setSigFileName(null); if (sigRef.current) sigRef.current.value = ""; }} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
         </div>
 
         {/* Message or File */}
@@ -197,12 +197,14 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
                 <option value="base64">Base64 (r||s)</option>
                 <option value="hex">Hex</option>
               </select>
-              <label className="cursor-pointer">
+              {mode === "file" ? (
+                <label className="cursor-pointer">
                   <span className="text-xs text-primary underline underline-offset-2 hover:opacity-70">
-                  {sigFileName ? `📎 ${sigFileName}` : t('enterOrImportSignature')}
-                </span>
-                <input ref={sigRef} type="file" accept=".sig,.txt,.hex" className="hidden" onChange={handleSigFileChange} />
-              </label>
+                    {sigFileName ? `📎 ${sigFileName}` : t('enterOrImportSignature')}
+                  </span>
+                  <input ref={sigRef} type="file" accept=".sig,.txt,.hex" className="hidden" onChange={handleSigFileChange} />
+                </label>
+              ) : null}
               {sigFileName && (
                 <Button variant="ghost" size="icon" className="h-5 w-5 ml-1" onClick={clearSigFile}><X className="w-3 h-3" /></Button>
               )}
