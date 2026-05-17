@@ -74,6 +74,7 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
   const clearSigFile = () => {
     resetSignatureInput();
     if (sigRef.current) sigRef.current.value = "";
+    window.location.reload();
   };
 
   const handleVerify = async () => {
