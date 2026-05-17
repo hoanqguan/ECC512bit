@@ -10,7 +10,7 @@ import { HistoryStore } from "@/lib/historyStore";
 import { toast } from "sonner";
 import { useT } from "@/lib/i18n";
 
-function FileDropZone({ file, fileRef, onFileChange, onClear }) {
+function FileDropZone({ file, fileRef, onFileChange, onClear, t }) {
   return !file ? (
     <label className="flex flex-col items-center gap-2 border-2 border-dashed rounded-lg p-5 cursor-pointer hover:bg-muted/50 transition-colors">
       <FileUp className="w-7 h-7 text-muted-foreground" />
@@ -150,7 +150,7 @@ export default function EncryptPanel({ selectedKey, showKeyList }) {
           <div>
             <Label className="text-xs font-medium">File</Label>
             <div className="mt-1">
-              <FileDropZone file={file} fileRef={fileRef} onFileChange={handleFileChange} onClear={clearFile} />
+              <FileDropZone file={file} fileRef={fileRef} onFileChange={handleFileChange} onClear={clearFile} t={t} />
             </div>
           </div>
         )}
