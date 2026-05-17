@@ -15,9 +15,9 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
   const [message, setMessage] = useState("");
   const [file, setFile] = useState(null);
   const [fileBytes, setFileBytes] = useState(null);
-  const [signature, setSignature] = useState({ text: "", file: "" });
-  const [sigFormat, setSigFormat] = useState({ text: "base64", file: "base64" });
-  const [sigFileName, setSigFileName] = useState({ text: null, file: null });
+  const [signature, setSignature] = useState("");
+  const [sigFormat, setSigFormat] = useState("base64");
+  const [sigFileName, setSigFileName] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [manualPublic, setManualPublic] = useState("");
@@ -26,10 +26,6 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
   const sigRef = useRef();
 
   let effectivePubKey = selectedKey?.public_key_pem || manualPublic || "";
-  const currentSignature = signature[mode];
-  const currentSigFormat = sigFormat[mode];
-  const currentSigFileName = sigFileName[mode];
-  const canImportSignature = mode === "text" ? message.trim().length > 0 : Boolean(file);
 
   useEffect(() => {
     setResult(null);
@@ -41,8 +37,8 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
     setFile(f);
     setResult(null);
     setWarning("");
-    setSignature((prev) => ({ ...prev, [mode]: "" }));
-    setSigFileName((prev) => ({ ...prev, [mode]: null }));
+    setSignature("");
+    setSigFileName(null);
     const reader = new FileReader();
     reader.onload = (ev) => setFileBytes(new Uint8Array(ev.target.result));
     reader.readAsArrayBuffer(f);
@@ -53,45 +49,36 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
   const handleSigFileChange = (e) => {
     const f = e.target.files[0];
     if (!f) return;
-    setSigFileName((prev) => ({ ...prev, [mode]: f.name }));
+    setSigFileName(f.name);
     setResult(null);
     setWarning("");
     const reader = new FileReader();
     const lowerName = f.name.toLowerCase();
     if (lowerName.endsWith('.hex')) {
-      setSigFormat((prev) => ({ ...prev, [mode]: 'hex' }));
+      setSigFormat('hex');
     } else {
-      setSigFormat((prev) => ({ ...prev, [mode]: 'base64' }));
+      setSigFormat('base64');
     }
-    reader.onload = (ev) => {
-      setSignature((prev) => ({ ...prev, [mode]: ev.target.result.trim() }));
-      setWarning("");
-      if (sigRef.current) sigRef.current.value = "";
-    };
+    reader.onload = (ev) => { setSignature(ev.target.result.trim()); setWarning(""); };
     reader.readAsText(f);
   };
 
-  const clearSigFile = () => {
-    setSigFileName((prev) => ({ ...prev, [mode]: null }));
-    setSignature((prev) => ({ ...prev, [mode]: "" }));
-    if (sigRef.current) sigRef.current.value = "";
-    setResult(null);
-  };
+  const clearSigFile = () => { setSigFileName(null); setSignature(""); sigRef.current.value = ""; setResult(null); };
 
   const handleVerify = async () => {
     if (mode === "text" && !message.trim()) { setWarning(t('enterMessageToVerify')); toast.error(t('enterMessageToVerify')); return; }
     if (mode === "file" && !fileBytes) { setWarning(t('selectFileToVerify')); toast.error(t('selectFileToVerify')); return; }
-    if (!currentSignature.trim()) { setWarning(t('enterOrImportSignature')); toast.error(t('enterOrImportSignature')); return; }
+    if (!signature.trim()) { setWarning(t('enterOrImportSignature')); toast.error(t('enterOrImportSignature')); return; }
     if (!effectivePubKey.trim()) { setWarning(t('selectPublicKeyOrPaste')); toast.error(t('selectPublicKeyOrPaste')); return; }
     setLoading(true);
     setWarning("");
     try {
       const data = mode === "text" ? message : fileBytes;
       // Convert signature to base64 r||s if needed and validate format
-      let sigToVerify = currentSignature.trim();
-      if (currentSigFormat === "base64") {
+      let sigToVerify = signature.trim();
+      if (sigFormat === "base64") {
         signatureBase64ToHex(sigToVerify); // validate length and format
-      } else if (currentSigFormat === "hex") {
+      } else if (sigFormat === "hex") {
         sigToVerify = signatureHexToBase64(sigToVerify);
       }
       const valid = await verify(data, sigToVerify, effectivePubKey.trim());
@@ -143,22 +130,8 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
 
         {/* Mode toggle */}
         <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
-          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => {
-            if (mode !== "text") {
-              setSignature((prev) => ({ ...prev, [mode]: "" }));
-              setSigFileName((prev) => ({ ...prev, [mode]: null }));
-              setResult(null);
-              setMode("text");
-            }
-          }} className="h-6 px-3 text-xs">{t('modeText')}</Button>
-          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => {
-            if (mode !== "file") {
-              setSignature((prev) => ({ ...prev, [mode]: "" }));
-              setSigFileName((prev) => ({ ...prev, [mode]: null }));
-              setResult(null);
-              setMode("file");
-            }
-          }} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
+          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => { setMode("text"); setResult(null); }} className="h-6 px-3 text-xs">{t('modeText')}</Button>
+          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => { setMode("file"); setResult(null); }} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
         </div>
 
         {/* Message or File */}
@@ -197,49 +170,49 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
         {/* Signature — paste or import .sig */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <Label className="text-xs font-medium">Signature ({currentSigFormat === "base64" ? "base64" : "hex"})</Label>
+            <Label className="text-xs font-medium">Signature ({sigFormat === "base64" ? "base64" : "hex"})</Label>
             <div className="flex items-center gap-2">
               <select
                 className="text-xs p-1 rounded border"
-                value={currentSigFormat}
+                value={sigFormat}
                 onChange={(e) => {
                   const newFormat = e.target.value;
-                  let normalizedSignature = currentSignature.trim();
+                  let normalizedSignature = signature.trim();
                   if (normalizedSignature) {
                     try {
-                      if (currentSigFormat === "base64") {
+                      if (sigFormat === "base64") {
                         if (newFormat === "hex") normalizedSignature = signatureBase64ToHex(normalizedSignature);
-                      } else if (currentSigFormat === "hex") {
+                      } else if (sigFormat === "hex") {
                         if (newFormat === "base64") normalizedSignature = signatureHexToBase64(normalizedSignature);
                       }
-                      setSignature((prev) => ({ ...prev, [mode]: normalizedSignature }));
+                      setSignature(normalizedSignature);
                     } catch (err) {
                       setWarning(t('invalidSignatureFormat') || 'Invalid signature format');
                     }
                   }
-                  setSigFormat((prev) => ({ ...prev, [mode]: newFormat }));
+                  setSigFormat(newFormat);
                   setResult(null);
                 }}
               >
                 <option value="base64">Base64 (r||s)</option>
                 <option value="hex">Hex</option>
               </select>
-              <label className={"cursor-pointer " + (!canImportSignature ? "pointer-events-none opacity-50" : "") }>
+              <label className="cursor-pointer">
                   <span className="text-xs text-primary underline underline-offset-2 hover:opacity-70">
-                  {currentSigFileName ? `📎 ${currentSigFileName}` : t('enterOrImportSignature')}
+                  {sigFileName ? `📎 ${sigFileName}` : t('enterOrImportSignature')}
                 </span>
-                <input ref={sigRef} type="file" accept=".sig,.txt,.hex" disabled={!canImportSignature} className="hidden" onChange={handleSigFileChange} />
+                <input ref={sigRef} type="file" accept=".sig,.txt,.hex" className="hidden" onChange={handleSigFileChange} />
               </label>
-              {currentSigFileName && (
+              {sigFileName && (
                 <Button variant="ghost" size="icon" className="h-5 w-5 ml-1" onClick={clearSigFile}><X className="w-3 h-3" /></Button>
               )}
             </div>
           </div>
 
             <Textarea
-            placeholder={currentSigFormat === "hex" ? t('pasteHexSignature') || "Paste hex signature..." : t('pasteBase64Signature') || "Paste the base64 signature, or import a .sig file above..."}
-            value={currentSignature}
-            onChange={(e) => { setSignature((prev) => ({ ...prev, [mode]: e.target.value })); setSigFileName((prev) => ({ ...prev, [mode]: null })); setResult(null); setWarning(""); }}
+            placeholder={sigFormat === "hex" ? t('pasteHexSignature') || "Paste hex signature..." : t('pasteBase64Signature') || "Paste the base64 signature, or import a .sig file above..."}
+            value={signature}
+            onChange={(e) => { setSignature(e.target.value); setSigFileName(null); setResult(null); setWarning(""); }}
             className="h-20 resize-none font-mono text-xs"
           />
         </div>
