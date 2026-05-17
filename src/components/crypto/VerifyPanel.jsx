@@ -63,11 +63,20 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
     } else {
       setSigFormat((prev) => ({ ...prev, [mode]: 'base64' }));
     }
-    reader.onload = (ev) => { setSignature((prev) => ({ ...prev, [mode]: ev.target.result.trim() })); setWarning(""); };
+    reader.onload = (ev) => {
+      setSignature((prev) => ({ ...prev, [mode]: ev.target.result.trim() }));
+      setWarning("");
+      if (sigRef.current) sigRef.current.value = "";
+    };
     reader.readAsText(f);
   };
 
-  const clearSigFile = () => { setSigFileName((prev) => ({ ...prev, [mode]: null })); setSignature((prev) => ({ ...prev, [mode]: "" })); sigRef.current.value = ""; setResult(null); };
+  const clearSigFile = () => {
+    setSigFileName((prev) => ({ ...prev, [mode]: null }));
+    setSignature((prev) => ({ ...prev, [mode]: "" }));
+    if (sigRef.current) sigRef.current.value = "";
+    setResult(null);
+  };
 
   const handleVerify = async () => {
     if (mode === "text" && !message.trim()) { setWarning(t('enterMessageToVerify')); toast.error(t('enterMessageToVerify')); return; }
