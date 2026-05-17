@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { KeyStore } from "@/lib/localKeyStore";
-import { LocalAuth } from "@/lib/localAuth";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus, KeyRound, Loader2, ShieldCheck, LogOut, Upload } from "lucide-react";
@@ -36,8 +35,7 @@ export default function CryptoToolkit() {
   const [verifyMode, setVerifyMode] = useState("text");
 
   const refreshHistory = () => setHistoryTick((t) => t + 1);
-  const navigate = useNavigate();
-  const session = LocalAuth.getSession();
+  const importRef = useRef();
   const importRef = useRef();
   const keyListRef = useRef();
 
@@ -147,10 +145,7 @@ export default function CryptoToolkit() {
     reader.readAsText(f);
   };
 
-  const handleLogout = () => {
-    LocalAuth.logout();
-    navigate("/auth");
-  };
+  // logout removed — app no longer uses authentication
 
   const loadKeys = () => {
     setLoading(true);
@@ -187,17 +182,7 @@ export default function CryptoToolkit() {
               <p className="text-xs text-muted-foreground">Brainpool P-512 · ECDSA · SHA-512</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button onClick={handleLogout} size="sm" variant="outline" className="gap-1.5">
-              {session && (
-                <span className="text-sm font-semibold text-foreground hidden sm:inline mr-1">
-                  👤 {session.username}
-                </span>
-              )}
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Logout</span>
-            </Button>
-          </div>
+          <div className="flex items-center gap-2" />
         </div>
       </div>
 

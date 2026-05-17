@@ -95,8 +95,6 @@ const strings = {
     passwordTooShort: "Password must be at least 6 characters",
     accountCreated: "Account created! Welcome.",
     loggedIn: "Logged in successfully",
-    guestLoginSuccess: "Logged in as guest",
-    continueAsGuest: "Continue as Guest",
     register: "Register",
     alreadyHaveAccount: "Already have an account?",
     localDataNote: "🔒 All data stored locally in your browser. No server required.",
