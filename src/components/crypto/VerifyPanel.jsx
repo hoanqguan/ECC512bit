@@ -70,23 +70,18 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
     if (mode === "file" && !fileBytes) { setWarning(t('selectFileToVerify')); toast.error(t('selectFileToVerify')); return; }
     if (!signature.trim()) { setWarning(t('enterOrImportSignature')); toast.error(t('enterOrImportSignature')); return; }
     if (!effectivePubKey.trim()) { setWarning(t('selectPublicKeyOrPaste')); toast.error(t('selectPublicKeyOrPaste')); return; }
-    const sigToVerify = signature.trim();
-    if (sigFileName) {
-      setSigFileName(null);
-      if (sigRef.current) sigRef.current.value = "";
-    }
     setLoading(true);
     setWarning("");
     try {
       const data = mode === "text" ? message : fileBytes;
       // Convert signature to base64 r||s if needed and validate format
-      let normalizedSigToVerify = sigToVerify;
+      let sigToVerify = signature.trim();
       if (sigFormat === "base64") {
-        signatureBase64ToHex(normalizedSigToVerify); // validate length and format
+        signatureBase64ToHex(sigToVerify); // validate length and format
       } else if (sigFormat === "hex") {
-        normalizedSigToVerify = signatureHexToBase64(normalizedSigToVerify);
+        sigToVerify = signatureHexToBase64(sigToVerify);
       }
-      const valid = await verify(data, normalizedSigToVerify, effectivePubKey.trim());
+      const valid = await verify(data, sigToVerify, effectivePubKey.trim());
       setResult(valid);
       HistoryStore.add({
         type: "verify",
