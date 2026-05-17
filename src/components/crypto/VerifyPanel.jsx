@@ -195,14 +195,12 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
                 <option value="base64">Base64 (r||s)</option>
                 <option value="hex">Hex</option>
               </select>
-              {mode === "file" ? (
-                <label className="cursor-pointer">
-                  <span className="text-xs text-primary underline underline-offset-2 hover:opacity-70">
-                    {sigFileName ? `📎 ${sigFileName}` : t('enterOrImportSignature')}
-                  </span>
-                  <input ref={sigRef} type="file" accept=".sig,.txt,.hex" className="hidden" onChange={handleSigFileChange} />
-                </label>
-              ) : null}
+              <label className="cursor-pointer">
+                <span className="text-xs text-primary underline underline-offset-2 hover:opacity-70">
+                  {sigFileName ? `📎 ${sigFileName}` : t('enterOrImportSignature')}
+                </span>
+                <input ref={sigRef} type="file" accept=".sig,.txt,.hex" className="hidden" onChange={handleSigFileChange} />
+              </label>
               {sigFileName && (
                 <Button variant="ghost" size="icon" className="h-5 w-5 ml-1" onClick={clearSigFile}><X className="w-3 h-3" /></Button>
               )}
