@@ -274,31 +274,42 @@ function rsToDER(r, s) {
   return out;
 }
 
+function parseDerLength(bytes, offset) {
+  const lenByte = bytes[offset];
+  if (lenByte < 0x80) {
+    return { length: lenByte, size: 1 };
+  }
+  const count = lenByte & 0x7f;
+  let length = 0;
+  for (let i = 0; i < count; i++) {
+    length = (length << 8) | bytes[offset + 1 + i];
+  }
+  return { length, size: 1 + count };
+}
+
 function derToRS(derBytes) {
-  // very small DER parser for sequence(INTEGER r, INTEGER s)
+  // small DER parser for sequence(INTEGER r, INTEGER s)
   if (derBytes[0] !== 0x30) throw new Error("Invalid DER sequence");
-  const seqLen = derBytes[1];
-  let idx = 2;
+  const seqLenInfo = parseDerLength(derBytes, 1);
+  let idx = 1 + seqLenInfo.size;
   if (derBytes[idx] !== 0x02) throw new Error("Missing INTEGER for r");
-  const rLen = derBytes[idx + 1];
-  const rBytes = derBytes.slice(idx + 2, idx + 2 + rLen);
-  idx = idx + 2 + rLen;
+  const rLenInfo = parseDerLength(derBytes, idx + 1);
+  const rOffset = idx + 1 + rLenInfo.size;
+  const rBytesRaw = derBytes.slice(rOffset, rOffset + rLenInfo.length);
+  idx = rOffset + rLenInfo.length;
   if (derBytes[idx] !== 0x02) throw new Error("Missing INTEGER for s");
-  const sLen = derBytes[idx + 1];
-  const sBytes = derBytes.slice(idx + 2, idx + 2 + sLen);
+  const sLenInfo = parseDerLength(derBytes, idx + 1);
+  const sOffset = idx + 1 + sLenInfo.size;
+  const sBytesRaw = derBytes.slice(sOffset, sOffset + sLenInfo.length);
   // remove possible leading 0x00
-  const rClean = rBytes[0] === 0x00 ? rBytes.slice(1) : rBytes;
-  const sClean = sBytes[0] === 0x00 ? sBytes.slice(1) : sBytes;
-  const rPad = new Uint8Array(64 - rClean.length);
-  const rBytes = new Uint8Array(64);
-  rBytes.set(rPad, 0);
-  rBytes.set(rClean, 64 - rClean.length);
-  const sPad = new Uint8Array(64 - sClean.length);
-  const sBytes = new Uint8Array(64);
-  sBytes.set(sPad, 0);
-  sBytes.set(sClean, 64 - sClean.length);
-  const r = bytesToBigInt(rBytes);
-  const s = bytesToBigInt(sBytes);
+  const rClean = rBytesRaw.length > 0 && rBytesRaw[0] === 0x00 ? rBytesRaw.slice(1) : rBytesRaw;
+  const sClean = sBytesRaw.length > 0 && sBytesRaw[0] === 0x00 ? sBytesRaw.slice(1) : sBytesRaw;
+  const rFinal = new Uint8Array(64);
+  rFinal.set(rClean, 64 - rClean.length);
+  const sFinal = new Uint8Array(64);
+  sFinal.set(sClean, 64 - sClean.length);
+  const r = bytesToBigInt(rFinal);
+  const s = bytesToBigInt(sFinal);
   return { r, s };
 }
 
