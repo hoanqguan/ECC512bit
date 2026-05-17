@@ -18,6 +18,7 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
   const [signature, setSignature] = useState("");
   const [sigFormat, setSigFormat] = useState("base64");
   const [sigFileName, setSigFileName] = useState(null);
+  const [sigInputKey, setSigInputKey] = useState(0);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [manualPublic, setManualPublic] = useState("");
@@ -63,7 +64,17 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
     reader.readAsText(f);
   };
 
-  const clearSigFile = () => { setSigFileName(null); setSignature(""); sigRef.current.value = ""; setResult(null); };
+  const resetSignatureInput = () => {
+    setSignature("");
+    setSigFileName(null);
+    setResult(null);
+    setSigInputKey((key) => key + 1);
+  };
+
+  const clearSigFile = () => {
+    resetSignatureInput();
+    if (sigRef.current) sigRef.current.value = "";
+  };
 
   const handleVerify = async () => {
     if (mode === "text" && !message.trim()) { setWarning(t('enterMessageToVerify')); toast.error(t('enterMessageToVerify')); return; }
@@ -130,8 +141,8 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
 
         {/* Mode toggle */}
         <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
-          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => { setMode("text"); setResult(null); setSignature(""); setSigFileName(null); if (sigRef.current) sigRef.current.value = ""; }} className="h-6 px-3 text-xs">{t('modeText')}</Button>
-          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => { setMode("file"); setResult(null); setSignature(""); setSigFileName(null); if (sigRef.current) sigRef.current.value = ""; }} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
+          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => { setMode("text"); resetSignatureInput(); }} className="h-6 px-3 text-xs">{t('modeText')}</Button>
+          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => { setMode("file"); resetSignatureInput(); }} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
         </div>
 
         {/* Message or File */}
@@ -201,7 +212,7 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
                   <span className="text-xs text-primary underline underline-offset-2 hover:opacity-70">
                   {sigFileName ? `📎 ${sigFileName}` : t('enterOrImportSignature')}
                 </span>
-                <input ref={sigRef} type="file" accept=".sig,.txt,.hex" className="hidden" onChange={handleSigFileChange} />
+                <input key={sigInputKey} ref={sigRef} type="file" accept=".sig,.txt,.hex" className="hidden" onChange={handleSigFileChange} />
               </label>
               {sigFileName && (
                 <Button variant="ghost" size="icon" className="h-5 w-5 ml-1" onClick={clearSigFile}><X className="w-3 h-3" /></Button>
