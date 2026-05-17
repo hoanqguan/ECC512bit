@@ -26,7 +26,14 @@ export const LocalAuth = {
       throw new Error("Username already exists");
     }
     const hash = await hashPassword(password);
-    const user = { id: crypto.randomUUID(), username, passwordHash: hash, created_date: new Date().toISOString() };
+    const user = {
+      id: crypto.randomUUID(),
+      username,
+      passwordHash: hash,
+      role: 'user',
+      displayName: username,
+      created_date: new Date().toISOString()
+    };
     users.push(user);
     saveUsers(users);
     return user;
@@ -61,4 +68,56 @@ export const LocalAuth = {
   isLoggedIn() {
     return !!this.getSession();
   }
+};
+
+// Additional helper methods
+LocalAuth.getUsers = function() {
+  return loadUsers();
+};
+
+LocalAuth.getUserById = function(id) {
+  const users = loadUsers();
+  return users.find(u => u.id === id) || null;
+};
+
+LocalAuth.updateUser = async function(id, updates) {
+  const users = loadUsers();
+  const idx = users.findIndex(u => u.id === id);
+  if (idx === -1) throw new Error('User not found');
+  users[idx] = { ...users[idx], ...updates };
+  saveUsers(users);
+  return users[idx];
+};
+
+LocalAuth.setUserRole = async function(id, role) {
+  return await this.updateUser(id, { role });
+};
+
+LocalAuth.deleteUser = async function(id) {
+  let users = loadUsers();
+  users = users.filter(u => u.id !== id);
+  saveUsers(users);
+};
+
+LocalAuth.clearAll = function() {
+  localStorage.removeItem(USERS_KEY);
+  localStorage.removeItem(SESSION_KEY);
+};
+
+LocalAuth.logout = function() {
+  localStorage.removeItem(SESSION_KEY);
+};
+
+LocalAuth.getCurrentUser = function() {
+  const session = this.getSession();
+  if (!session) return null;
+  return this.getUserById(session.userId);
+};
+
+LocalAuth.isAuthorized = function(allowedRoles) {
+  if (!allowedRoles) return true;
+  const user = this.getCurrentUser();
+  if (!user) return false;
+  if (Array.isArray(allowedRoles)) return allowedRoles.includes(user.role);
+  return user.role === allowedRoles;
 };
