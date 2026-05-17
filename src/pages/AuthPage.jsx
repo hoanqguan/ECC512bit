@@ -42,6 +42,19 @@ export default function AuthPage() {
     }
   };
 
+  const handleGuest = async () => {
+    setLoading(true);
+    try {
+      await LocalAuth.guestLogin();
+      toast.success(t('guestLoginSuccess') || 'Logged in as guest');
+      navigate("/");
+    } catch (err) {
+      toast.error(err.message || 'Guest login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -106,6 +119,12 @@ export default function AuthPage() {
                 {mode === "login" ? t('signIn') : t('createAccount')}
               </Button>
             </form>
+
+            <div className="mt-3">
+              <Button variant="ghost" className="w-full" onClick={handleGuest} disabled={loading}>
+                {t('continueAsGuest')}
+              </Button>
+            </div>
 
             <div className="mt-4 text-center text-sm text-muted-foreground">
               {mode === "login" ? (

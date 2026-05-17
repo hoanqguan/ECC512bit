@@ -43,6 +43,12 @@ export const LocalAuth = {
     return session;
   },
 
+  async guestLogin() {
+    const session = { userId: `guest-${crypto.randomUUID()}`, username: "guest", token: crypto.randomUUID(), guest: true };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    return session;
+  },
+
   logout() {
     localStorage.removeItem(SESSION_KEY);
   },
