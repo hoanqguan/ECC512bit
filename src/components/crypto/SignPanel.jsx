@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, PenLine, Copy, CheckCircle2, FileUp, X, Download, Eye, EyeOff } from "lucide-react";
-import { sign, signatureBase64ToHex, signatureBase64ToDER } from "@/lib/brainpool";
+import { sign, signatureBase64ToHex } from "@/lib/brainpool";
 import { HistoryStore } from "@/lib/historyStore";
 import { toast } from "sonner";
 import { useT } from "@/lib/i18n";
@@ -51,7 +51,6 @@ export default function SignPanel({ selectedKey, showKeyList }) {
       setBase64Signature(sig);
       if (sigFormat === "base64") setSignature(sig);
       else if (sigFormat === "hex") setSignature(signatureBase64ToHex(sig));
-      else if (sigFormat === "der") setSignature(signatureBase64ToDER(sig));
       setBlurred(true);
       HistoryStore.add({
         type: "sign",
@@ -69,22 +68,12 @@ export default function SignPanel({ selectedKey, showKeyList }) {
   };
 
   const downloadSig = () => {
-    let blob;
-    if (sigFormat === "base64" || sigFormat === "hex") {
-      blob = new Blob([signature], { type: "text/plain" });
-    } else {
-      // DER: signature stored as base64 DER
-      const derB64 = signature;
-      const binary = atob(derB64.replace(/-/g, "+").replace(/_/g, "/"));
-      const arr = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
-      blob = new Blob([arr], { type: "application/octet-stream" });
-    }
+    const blob = new Blob([signature], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     const baseName = (mode === "file" ? file.name : "message").replace(/\.[^.]+$/, "");
-    const ext = sigFormat === "der" ? ".der" : ".sig";
+    const ext = sigFormat === "hex" ? ".hex" : ".sig";
     a.download = `${baseName}${ext}`;
     a.click();
     URL.revokeObjectURL(url);
@@ -173,7 +162,7 @@ export default function SignPanel({ selectedKey, showKeyList }) {
         {signature && (
           <div>
             <div className="flex justify-between items-center mb-1">
-              <Label className="text-xs font-medium text-muted-foreground">SIGNATURE ({sigFormat === "base64" ? "base64" : sigFormat === "hex" ? "hex" : "DER (base64)"})</Label>
+              <Label className="text-xs font-medium text-muted-foreground">SIGNATURE ({sigFormat === "base64" ? "base64" : "hex"})</Label>
               <div className="flex items-center gap-2">
                 <select
                   className="text-xs p-1 rounded border"
@@ -187,12 +176,10 @@ export default function SignPanel({ selectedKey, showKeyList }) {
                     }
                     if (newFormat === "base64") setSignature(base64Signature);
                     else if (newFormat === "hex") setSignature(signatureBase64ToHex(base64Signature));
-                    else if (newFormat === "der") setSignature(signatureBase64ToDER(base64Signature));
                   }}
                 >
                   <option value="base64">Base64 (r||s)</option>
                   <option value="hex">Hex</option>
-                  <option value="der">DER</option>
                 </select>
                 <div className="flex gap-1">
                   <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setBlurred(!blurred)}>

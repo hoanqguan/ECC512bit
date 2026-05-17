@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Loader2, ShieldCheck, CheckCircle2, XCircle, FileUp, X } from "lucide-react";
-import { verify, signatureBase64ToHex, signatureHexToBase64, signatureBase64ToDER, signatureDERToBase64 } from "@/lib/brainpool";
+import { verify, signatureBase64ToHex, signatureHexToBase64 } from "@/lib/brainpool";
 import { HistoryStore } from "@/lib/historyStore";
 import { toast } from "sonner";
 import { useT } from "@/lib/i18n";
@@ -47,24 +47,13 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
     setWarning("");
     const reader = new FileReader();
     const lowerName = f.name.toLowerCase();
-    if (lowerName.endsWith('.der')) {
-      setSigFormat('der');
-      reader.onload = (ev) => {
-        const bytes = new Uint8Array(ev.target.result);
-        let binary = "";
-        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-        const b64 = btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-        setSignature(b64);
-      };
-      reader.readAsArrayBuffer(f);
-    } else if (lowerName.endsWith('.hex')) {
+    if (lowerName.endsWith('.hex')) {
       setSigFormat('hex');
-      reader.onload = (ev) => { setSignature(ev.target.result.trim()); setWarning(""); };
-      reader.readAsText(f);
     } else {
-      reader.onload = (ev) => { setSignature(ev.target.result.trim()); setWarning(""); };
-      reader.readAsText(f);
+      setSigFormat('base64');
     }
+    reader.onload = (ev) => { setSignature(ev.target.result.trim()); setWarning(""); };
+    reader.readAsText(f);
   };
 
   const clearSigFile = () => { setSigFileName(null); setSignature(""); sigRef.current.value = ""; };
@@ -84,8 +73,6 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
         signatureBase64ToHex(sigToVerify); // validate length and format
       } else if (sigFormat === "hex") {
         sigToVerify = signatureHexToBase64(sigToVerify);
-      } else if (sigFormat === "der") {
-        sigToVerify = signatureDERToBase64(sigToVerify);
       }
       const valid = await verify(data, sigToVerify, effectivePubKey.trim());
       setResult(valid);
@@ -176,7 +163,7 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
         {/* Signature — paste or import .sig */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <Label className="text-xs font-medium">Signature ({sigFormat === "base64" ? "base64" : sigFormat === "hex" ? "hex" : "DER (base64)"})</Label>
+            <Label className="text-xs font-medium">Signature ({sigFormat === "base64" ? "base64" : "hex"})</Label>
             <div className="flex items-center gap-2">
               <select
                 className="text-xs p-1 rounded border"
@@ -188,13 +175,8 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
                     try {
                       if (sigFormat === "base64") {
                         if (newFormat === "hex") normalizedSignature = signatureBase64ToHex(normalizedSignature);
-                        else if (newFormat === "der") normalizedSignature = signatureBase64ToDER(normalizedSignature);
                       } else if (sigFormat === "hex") {
                         if (newFormat === "base64") normalizedSignature = signatureHexToBase64(normalizedSignature);
-                        else if (newFormat === "der") normalizedSignature = signatureBase64ToDER(signatureHexToBase64(normalizedSignature));
-                      } else if (sigFormat === "der") {
-                        if (newFormat === "base64") normalizedSignature = signatureDERToBase64(normalizedSignature);
-                        else if (newFormat === "hex") normalizedSignature = signatureBase64ToHex(signatureDERToBase64(normalizedSignature));
                       }
                       setSignature(normalizedSignature);
                     } catch (err) {
@@ -206,13 +188,12 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
               >
                 <option value="base64">Base64 (r||s)</option>
                 <option value="hex">Hex</option>
-                <option value="der">DER</option>
               </select>
               <label className="cursor-pointer">
                   <span className="text-xs text-primary underline underline-offset-2 hover:opacity-70">
                   {sigFileName ? `📎 ${sigFileName}` : t('enterOrImportSignature')}
                 </span>
-                <input ref={sigRef} type="file" accept=".sig,.txt,.der" className="hidden" onChange={handleSigFileChange} />
+                <input ref={sigRef} type="file" accept=".sig,.txt,.hex" className="hidden" onChange={handleSigFileChange} />
               </label>
               {sigFileName && (
                 <Button variant="ghost" size="icon" className="h-5 w-5 ml-1" onClick={clearSigFile}><X className="w-3 h-3" /></Button>
@@ -221,7 +202,7 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
           </div>
 
             <Textarea
-            placeholder={sigFormat === "hex" ? t('pasteHexSignature') || "Paste hex signature..." : sigFormat === "der" ? t('pasteDerSignature') || "Paste DER (base64) or import .der file..." : t('pasteBase64Signature') || "Paste the base64 signature, or import a .sig file above..."}
+            placeholder={sigFormat === "hex" ? t('pasteHexSignature') || "Paste hex signature..." : t('pasteBase64Signature') || "Paste the base64 signature, or import a .sig file above..."}
             value={signature}
             onChange={(e) => { setSignature(e.target.value); setSigFileName(null); setWarning(""); }}
             className="h-20 resize-none font-mono text-xs"

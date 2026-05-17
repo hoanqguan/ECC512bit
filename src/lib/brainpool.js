@@ -236,7 +236,7 @@ function jwkToPrivateKeyPem(jwk) {
   return toPEM("BRAINPOOL P512 PRIVATE KEY", d);
 }
 
-// ---- Signature format conversions (base64 r||s <-> hex, DER, (r,s) JSON) ----
+// ---- Signature format conversions (base64 r||s <-> hex) ----
 
 function bytesToHex(bytes) {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -247,70 +247,6 @@ function hexToBytes(hex) {
   const out = new Uint8Array(hex.length / 2);
   for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   return out;
-}
-
-function bigintToDERInteger(n) {
-  if (n === 0n) return new Uint8Array([0x02, 0x01, 0x00]);
-  let hex = n.toString(16);
-  if (hex.length % 2) hex = "0" + hex;
-  let bytes = hex.match(/.{1,2}/g).map((h) => parseInt(h, 16));
-  // remove leading zeros
-  while (bytes.length > 1 && bytes[0] === 0x00) bytes.shift();
-  // if highest bit set, prefix 0x00 to indicate unsigned integer
-  if (bytes[0] & 0x80) bytes = [0x00, ...bytes];
-  const len = bytes.length;
-  return new Uint8Array([0x02, len, ...bytes]);
-}
-
-function rsToDER(r, s) {
-  const rInt = bigintToDERInteger(r);
-  const sInt = bigintToDERInteger(s);
-  const seqLen = rInt.length + sInt.length;
-  const out = new Uint8Array(2 + seqLen);
-  out[0] = 0x30; // SEQUENCE
-  out[1] = seqLen;
-  out.set(rInt, 2);
-  out.set(sInt, 2 + rInt.length);
-  return out;
-}
-
-function parseDerLength(bytes, offset) {
-  const lenByte = bytes[offset];
-  if (lenByte < 0x80) {
-    return { length: lenByte, size: 1 };
-  }
-  const count = lenByte & 0x7f;
-  let length = 0;
-  for (let i = 0; i < count; i++) {
-    length = (length << 8) | bytes[offset + 1 + i];
-  }
-  return { length, size: 1 + count };
-}
-
-function derToRS(derBytes) {
-  // small DER parser for sequence(INTEGER r, INTEGER s)
-  if (derBytes[0] !== 0x30) throw new Error("Invalid DER sequence");
-  const seqLenInfo = parseDerLength(derBytes, 1);
-  let idx = 1 + seqLenInfo.size;
-  if (derBytes[idx] !== 0x02) throw new Error("Missing INTEGER for r");
-  const rLenInfo = parseDerLength(derBytes, idx + 1);
-  const rOffset = idx + 1 + rLenInfo.size;
-  const rBytesRaw = derBytes.slice(rOffset, rOffset + rLenInfo.length);
-  idx = rOffset + rLenInfo.length;
-  if (derBytes[idx] !== 0x02) throw new Error("Missing INTEGER for s");
-  const sLenInfo = parseDerLength(derBytes, idx + 1);
-  const sOffset = idx + 1 + sLenInfo.size;
-  const sBytesRaw = derBytes.slice(sOffset, sOffset + sLenInfo.length);
-  // remove possible leading 0x00
-  const rClean = rBytesRaw.length > 0 && rBytesRaw[0] === 0x00 ? rBytesRaw.slice(1) : rBytesRaw;
-  const sClean = sBytesRaw.length > 0 && sBytesRaw[0] === 0x00 ? sBytesRaw.slice(1) : sBytesRaw;
-  const rFinal = new Uint8Array(64);
-  rFinal.set(rClean, 64 - rClean.length);
-  const sFinal = new Uint8Array(64);
-  sFinal.set(sClean, 64 - sClean.length);
-  const r = bytesToBigInt(rFinal);
-  const s = bytesToBigInt(sFinal);
-  return { r, s };
 }
 
 function isHexString(str) {
@@ -333,37 +269,6 @@ function signatureHexToBase64(sigHex) {
   const bytes = hexToBytes(normalized);
   assertSignatureBytesLength(bytes, "hex");
   return uint8ArrayToBase64(bytes);
-}
-
-function signatureBase64ToDER(sigB64) {
-  const bytes = base64ToUint8Array(sigB64);
-  if (bytes.length !== 128) throw new Error("Invalid signature length");
-  const r = bytesToBigInt(bytes.slice(0, 64));
-  const s = bytesToBigInt(bytes.slice(64, 128));
-  const der = rsToDER(r, s);
-  // return base64 url-safe
-  return uint8ArrayToBase64(der);
-}
-
-function signatureDERToBase64(derB64) {
-  const derBytes = base64ToUint8Array(derB64);
-  const { r, s } = derToRS(derBytes);
-  const rBytes = bigIntToBytes(r, 64);
-  const sBytes = bigIntToBytes(s, 64);
-  const out = new Uint8Array(128);
-  out.set(rBytes, 0);
-  out.set(sBytes, 64);
-  return uint8ArrayToBase64(out);
-}
-
-function signatureHexToDER(hex) {
-  const b64 = signatureHexToBase64(hex);
-  return signatureBase64ToDER(b64);
-}
-
-function signatureDERToHex(derB64) {
-  const b64 = signatureDERToBase64(derB64);
-  return signatureBase64ToHex(b64);
 }
 
 // ---- SHA-512 hash ----
@@ -638,8 +543,4 @@ export {
   jwkToPrivateKeyPem,
   signatureBase64ToHex,
   signatureHexToBase64,
-  signatureBase64ToDER,
-  signatureDERToBase64,
-  signatureHexToDER,
-  signatureDERToHex,
 };
