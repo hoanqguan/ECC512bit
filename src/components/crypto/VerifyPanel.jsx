@@ -29,6 +29,7 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
   const currentSignature = signature[mode];
   const currentSigFormat = sigFormat[mode];
   const currentSigFileName = sigFileName[mode];
+  const canImportSignature = mode === "text" ? message.trim().length > 0 : Boolean(file);
 
   useEffect(() => {
     setResult(null);
@@ -134,16 +135,20 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
         {/* Mode toggle */}
         <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
           <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => {
-            setMode("text");
-            setResult(null);
-            setSignature((prev) => ({ ...prev, file: "" }));
-            setSigFileName((prev) => ({ ...prev, file: null }));
+            if (mode !== "text") {
+              setSignature((prev) => ({ ...prev, [mode]: "" }));
+              setSigFileName((prev) => ({ ...prev, [mode]: null }));
+              setResult(null);
+              setMode("text");
+            }
           }} className="h-6 px-3 text-xs">{t('modeText')}</Button>
           <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => {
-            setMode("file");
-            setResult(null);
-            setSignature((prev) => ({ ...prev, text: "" }));
-            setSigFileName((prev) => ({ ...prev, text: null }));
+            if (mode !== "file") {
+              setSignature((prev) => ({ ...prev, [mode]: "" }));
+              setSigFileName((prev) => ({ ...prev, [mode]: null }));
+              setResult(null);
+              setMode("file");
+            }
           }} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
         </div>
 
@@ -210,11 +215,11 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
                 <option value="base64">Base64 (r||s)</option>
                 <option value="hex">Hex</option>
               </select>
-              <label className="cursor-pointer">
+              <label className={"cursor-pointer " + (!canImportSignature ? "pointer-events-none opacity-50" : "") }>
                   <span className="text-xs text-primary underline underline-offset-2 hover:opacity-70">
                   {currentSigFileName ? `📎 ${currentSigFileName}` : t('enterOrImportSignature')}
                 </span>
-                <input ref={sigRef} type="file" accept=".sig,.txt,.hex" className="hidden" onChange={handleSigFileChange} />
+                <input ref={sigRef} type="file" accept=".sig,.txt,.hex" disabled={!canImportSignature} className="hidden" onChange={handleSigFileChange} />
               </label>
               {currentSigFileName && (
                 <Button variant="ghost" size="icon" className="h-5 w-5 ml-1" onClick={clearSigFile}><X className="w-3 h-3" /></Button>
