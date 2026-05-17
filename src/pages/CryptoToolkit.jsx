@@ -13,7 +13,6 @@ import HistoryPanel from "@/components/crypto/HistoryPanel";
 import { HistoryStore } from "@/lib/historyStore";
 import { jwkToPublicKeyPem, jwkToPrivateKeyPem, computeFingerprint } from "@/lib/brainpool";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
 
 export default function CryptoToolkit() {
   const [keyPairs, setKeyPairs] = useState([]);
@@ -35,7 +34,6 @@ export default function CryptoToolkit() {
   const [verifyMode, setVerifyMode] = useState("text");
 
   const refreshHistory = () => setHistoryTick((t) => t + 1);
-  const importRef = useRef();
   const importRef = useRef();
   const keyListRef = useRef();
 
