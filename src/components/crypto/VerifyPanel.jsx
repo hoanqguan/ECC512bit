@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Loader2, ShieldCheck, CheckCircle2, XCircle, FileUp, X } from "lucide-react";
-import { verify, signatureHexToBase64, signatureDERToBase64 } from "@/lib/brainpool";
+import { verify, signatureBase64ToHex, signatureHexToBase64, signatureDERToBase64 } from "@/lib/brainpool";
 import { HistoryStore } from "@/lib/historyStore";
 import { toast } from "sonner";
 import { useT } from "@/lib/i18n";
@@ -46,7 +46,9 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
     setSigFileName(f.name);
     setWarning("");
     const reader = new FileReader();
-    if (f.name.toLowerCase().endsWith('.der')) {
+    const lowerName = f.name.toLowerCase();
+    if (lowerName.endsWith('.der')) {
+      setSigFormat('der');
       reader.onload = (ev) => {
         const bytes = new Uint8Array(ev.target.result);
         let binary = "";
@@ -55,6 +57,10 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
         setSignature(b64);
       };
       reader.readAsArrayBuffer(f);
+    } else if (lowerName.endsWith('.hex')) {
+      setSigFormat('hex');
+      reader.onload = (ev) => { setSignature(ev.target.result.trim()); setWarning(""); };
+      reader.readAsText(f);
     } else {
       reader.onload = (ev) => { setSignature(ev.target.result.trim()); setWarning(""); };
       reader.readAsText(f);
@@ -72,10 +78,15 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
     setWarning("");
     try {
       const data = mode === "text" ? message : fileBytes;
-      // Convert signature to base64 r||s if needed
+      // Convert signature to base64 r||s if needed and validate format
       let sigToVerify = signature.trim();
-      if (sigFormat === "hex") sigToVerify = signatureHexToBase64(sigToVerify);
-      else if (sigFormat === "der") sigToVerify = signatureDERToBase64(sigToVerify);
+      if (sigFormat === "base64") {
+        signatureBase64ToHex(sigToVerify); // validate length and format
+      } else if (sigFormat === "hex") {
+        sigToVerify = signatureHexToBase64(sigToVerify);
+      } else if (sigFormat === "der") {
+        sigToVerify = signatureDERToBase64(sigToVerify);
+      }
       const valid = await verify(data, sigToVerify, effectivePubKey.trim());
       setResult(valid);
       HistoryStore.add({
@@ -87,8 +98,9 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
       });
       toast.success(valid ? t('verifyValid') : t('verifyInvalid'));
     } catch (e) {
-      setWarning(t('verifyInvalid'));
-      toast.error(t('verifyInvalid') + (e?.message ? (": " + e.message) : ""));
+      const msg = e?.message || t('verifyInvalid');
+      setWarning(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }

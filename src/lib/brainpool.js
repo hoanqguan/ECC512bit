@@ -294,13 +294,25 @@ function derToRS(derBytes) {
   return { r, s };
 }
 
+function isHexString(str) {
+  return /^[0-9a-fA-F]*$/.test(str);
+}
+
+function assertSignatureBytesLength(bytes, label) {
+  if (bytes.length !== 128) throw new Error(`Invalid ${label} signature length`);
+}
+
 function signatureBase64ToHex(sigB64) {
   const bytes = base64ToUint8Array(sigB64);
+  assertSignatureBytesLength(bytes, "base64");
   return bytesToHex(bytes);
 }
 
 function signatureHexToBase64(sigHex) {
-  const bytes = hexToBytes(sigHex);
+  const normalized = sigHex.trim();
+  if (!isHexString(normalized)) throw new Error("Invalid hex signature");
+  const bytes = hexToBytes(normalized);
+  assertSignatureBytesLength(bytes, "hex");
   return uint8ArrayToBase64(bytes);
 }
 
