@@ -5,7 +5,6 @@ import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-d
 import PageNotFound from './lib/PageNotFound';
 // Add page imports here
 import CryptoToolkit from "./pages/CryptoToolkit";
-import AuthPage from "./pages/AuthPage";
 import Report from "./pages/Report";
 
 const AuthenticatedApp = () => {

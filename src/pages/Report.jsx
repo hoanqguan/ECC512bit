@@ -198,7 +198,7 @@ export default function Report() {
         <Section title="5. Kiến Trúc Ứng Dụng">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
-              { icon: <ShieldCheck className="w-4 h-4" />, title: "Xác thực cục bộ", desc: "lib/localAuth.js — đăng ký/đăng nhập SHA-256, lưu session vào localStorage, không có server." },
+              { icon: <ShieldCheck className="w-4 h-4" />, title: "Offline-first", desc: "No server required — keys and state stored locally in localStorage." },
               { icon: <KeyRound className="w-4 h-4" />, title: "Lưu trữ khóa", desc: "lib/localKeyStore.js — CRUD key pairs trong localStorage, mỗi khóa có id, timestamp, fingerprint." },
               { icon: <Lock className="w-4 h-4" />, title: "Thư viện mật mã", desc: "lib/brainpool.js — thuần JavaScript, BigInt, không dependency, chạy offline hoàn toàn." },
               { icon: <FileText className="w-4 h-4" />, title: "Hỗ trợ file", desc: "Sign/Verify hỗ trợ văn bản và file nhị phân. Encrypt/Decrypt xử lý chuỗi Base64." },
