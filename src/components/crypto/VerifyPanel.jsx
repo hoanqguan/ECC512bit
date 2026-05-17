@@ -18,7 +18,6 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
   const [signature, setSignature] = useState("");
   const [sigFormat, setSigFormat] = useState("base64");
   const [sigFileName, setSigFileName] = useState(null);
-  const [sigInputKey, setSigInputKey] = useState(0);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [manualPublic, setManualPublic] = useState("");
@@ -64,36 +63,30 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
     reader.readAsText(f);
   };
 
-  const resetSignatureInput = () => {
-    setSignature("");
-    setSigFileName(null);
-    setResult(null);
-    setSigInputKey((key) => key + 1);
-  };
-
-  const clearSigFile = () => {
-    resetSignatureInput();
-    if (sigRef.current) sigRef.current.value = "";
-    window.location.reload();
-  };
+  const clearSigFile = () => { setSigFileName(null); setSignature(""); sigRef.current.value = ""; setResult(null); };
 
   const handleVerify = async () => {
     if (mode === "text" && !message.trim()) { setWarning(t('enterMessageToVerify')); toast.error(t('enterMessageToVerify')); return; }
     if (mode === "file" && !fileBytes) { setWarning(t('selectFileToVerify')); toast.error(t('selectFileToVerify')); return; }
     if (!signature.trim()) { setWarning(t('enterOrImportSignature')); toast.error(t('enterOrImportSignature')); return; }
     if (!effectivePubKey.trim()) { setWarning(t('selectPublicKeyOrPaste')); toast.error(t('selectPublicKeyOrPaste')); return; }
+    const sigToVerify = signature.trim();
+    if (sigFileName) {
+      setSigFileName(null);
+      if (sigRef.current) sigRef.current.value = "";
+    }
     setLoading(true);
     setWarning("");
     try {
       const data = mode === "text" ? message : fileBytes;
       // Convert signature to base64 r||s if needed and validate format
-      let sigToVerify = signature.trim();
+      let normalizedSigToVerify = sigToVerify;
       if (sigFormat === "base64") {
-        signatureBase64ToHex(sigToVerify); // validate length and format
+        signatureBase64ToHex(normalizedSigToVerify); // validate length and format
       } else if (sigFormat === "hex") {
-        sigToVerify = signatureHexToBase64(sigToVerify);
+        normalizedSigToVerify = signatureHexToBase64(normalizedSigToVerify);
       }
-      const valid = await verify(data, sigToVerify, effectivePubKey.trim());
+      const valid = await verify(data, normalizedSigToVerify, effectivePubKey.trim());
       setResult(valid);
       HistoryStore.add({
         type: "verify",
@@ -142,8 +135,8 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
 
         {/* Mode toggle */}
         <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
-          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => { setMode("text"); resetSignatureInput(); }} className="h-6 px-3 text-xs">{t('modeText')}</Button>
-          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => { setMode("file"); resetSignatureInput(); }} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
+          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => { setMode("text"); setResult(null); }} className="h-6 px-3 text-xs">{t('modeText')}</Button>
+          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => { setMode("file"); setResult(null); }} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
         </div>
 
         {/* Message or File */}
@@ -213,7 +206,7 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
                   <span className="text-xs text-primary underline underline-offset-2 hover:opacity-70">
                   {sigFileName ? `📎 ${sigFileName}` : t('enterOrImportSignature')}
                 </span>
-                <input key={sigInputKey} ref={sigRef} type="file" accept=".sig,.txt,.hex" className="hidden" onChange={handleSigFileChange} />
+                <input ref={sigRef} type="file" accept=".sig,.txt,.hex" className="hidden" onChange={handleSigFileChange} />
               </label>
               {sigFileName && (
                 <Button variant="ghost" size="icon" className="h-5 w-5 ml-1" onClick={clearSigFile}><X className="w-3 h-3" /></Button>
