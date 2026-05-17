@@ -289,8 +289,16 @@ function derToRS(derBytes) {
   // remove possible leading 0x00
   const rClean = rBytes[0] === 0x00 ? rBytes.slice(1) : rBytes;
   const sClean = sBytes[0] === 0x00 ? sBytes.slice(1) : sBytes;
-  const r = bytesToBigInt(new Uint8Array(64 - rClean.length).fill(0).concat(Array.from(rClean)));
-  const s = bytesToBigInt(new Uint8Array(64 - sClean.length).fill(0).concat(Array.from(sClean)));
+  const rPad = new Uint8Array(64 - rClean.length);
+  const rBytes = new Uint8Array(64);
+  rBytes.set(rPad, 0);
+  rBytes.set(rClean, 64 - rClean.length);
+  const sPad = new Uint8Array(64 - sClean.length);
+  const sBytes = new Uint8Array(64);
+  sBytes.set(sPad, 0);
+  sBytes.set(sClean, 64 - sClean.length);
+  const r = bytesToBigInt(rBytes);
+  const s = bytesToBigInt(sBytes);
   return { r, s };
 }
 
