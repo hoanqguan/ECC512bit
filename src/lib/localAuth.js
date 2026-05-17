@@ -105,6 +105,16 @@ LocalAuth.clearAll = function() {
 };
 
 LocalAuth.logout = function() {
+  const session = this.getSession();
+  // If session is a guest session, attempt to remove any transient guest user record
+  try {
+    if (session && session.guest && session.userId) {
+      // deleteUser is safe if the id does not exist
+      this.deleteUser(session.userId).catch(() => {});
+    }
+  } catch (e) {
+    // ignore
+  }
   localStorage.removeItem(SESSION_KEY);
 };
 
@@ -120,4 +130,57 @@ LocalAuth.isAuthorized = function(allowedRoles) {
   if (!user) return false;
   if (Array.isArray(allowedRoles)) return allowedRoles.includes(user.role);
   return user.role === allowedRoles;
+};
+
+// Export a user's profile as JSON (suitable for transfer between devices).
+LocalAuth.exportUserById = function(id) {
+  const user = this.getUserById(id);
+  if (!user) throw new Error('User not found');
+  // Only export non-sensitive fields plus passwordHash (so user can import elsewhere)
+  const payload = {
+    version: 1,
+    user: {
+      id: user.id,
+      username: user.username,
+      passwordHash: user.passwordHash,
+      role: user.role,
+      displayName: user.displayName,
+      created_date: user.created_date,
+    }
+  };
+  return JSON.stringify(payload);
+};
+
+LocalAuth.exportCurrentUser = function() {
+  const session = this.getSession();
+  if (!session) throw new Error('No active session');
+  return this.exportUserById(session.userId);
+};
+
+// Import a user payload exported via exportUserById. By default will not overwrite existing usernames.
+LocalAuth.importUserFromJSON = function(jsonString, options = { overwrite: false }) {
+  let obj;
+  try { obj = JSON.parse(jsonString); } catch (e) { throw new Error('Invalid JSON'); }
+  if (!obj || !obj.user || !obj.user.username) throw new Error('Invalid payload');
+  const users = loadUsers();
+  const existing = users.find(u => u.username === obj.user.username);
+  if (existing && !options.overwrite) {
+    throw new Error('A user with that username already exists');
+  }
+  const userToSave = {
+    id: obj.user.id || crypto.randomUUID(),
+    username: obj.user.username,
+    passwordHash: obj.user.passwordHash || '',
+    role: obj.user.role || 'user',
+    displayName: obj.user.displayName || obj.user.username,
+    created_date: obj.user.created_date || new Date().toISOString()
+  };
+  if (existing) {
+    const idx = users.findIndex(u => u.username === existing.username);
+    users[idx] = { ...users[idx], ...userToSave };
+  } else {
+    users.push(userToSave);
+  }
+  saveUsers(users);
+  return userToSave;
 };
