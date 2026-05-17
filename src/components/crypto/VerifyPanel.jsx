@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Loader2, ShieldCheck, CheckCircle2, XCircle, FileUp, X } from "lucide-react";
-import { verify, signatureBase64ToHex, signatureHexToBase64, signatureDERToBase64 } from "@/lib/brainpool";
+import { verify, signatureBase64ToHex, signatureHexToBase64, signatureBase64ToDER, signatureDERToBase64 } from "@/lib/brainpool";
 import { HistoryStore } from "@/lib/historyStore";
 import { toast } from "sonner";
 import { useT } from "@/lib/i18n";
@@ -16,7 +16,7 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
   const [file, setFile] = useState(null);
   const [fileBytes, setFileBytes] = useState(null);
   const [signature, setSignature] = useState("");
-  const [sigFormat, setSigFormat] = useState("hex");
+  const [sigFormat, setSigFormat] = useState("base64");
   const [sigFileName, setSigFileName] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -178,7 +178,32 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
           <div className="flex items-center justify-between mb-1">
             <Label className="text-xs font-medium">Signature ({sigFormat === "base64" ? "base64" : sigFormat === "hex" ? "hex" : "DER (base64)"})</Label>
             <div className="flex items-center gap-2">
-              <select className="text-xs p-1 rounded border" value={sigFormat} onChange={(e) => setSigFormat(e.target.value)}>
+              <select
+                className="text-xs p-1 rounded border"
+                value={sigFormat}
+                onChange={(e) => {
+                  const newFormat = e.target.value;
+                  let normalizedSignature = signature.trim();
+                  if (normalizedSignature) {
+                    try {
+                      if (sigFormat === "base64") {
+                        if (newFormat === "hex") normalizedSignature = signatureBase64ToHex(normalizedSignature);
+                        else if (newFormat === "der") normalizedSignature = signatureBase64ToDER(normalizedSignature);
+                      } else if (sigFormat === "hex") {
+                        if (newFormat === "base64") normalizedSignature = signatureHexToBase64(normalizedSignature);
+                        else if (newFormat === "der") normalizedSignature = signatureBase64ToDER(signatureHexToBase64(normalizedSignature));
+                      } else if (sigFormat === "der") {
+                        if (newFormat === "base64") normalizedSignature = signatureDERToBase64(normalizedSignature);
+                        else if (newFormat === "hex") normalizedSignature = signatureBase64ToHex(signatureDERToBase64(normalizedSignature));
+                      }
+                      setSignature(normalizedSignature);
+                    } catch (err) {
+                      setWarning(t('invalidSignatureFormat') || 'Invalid signature format');
+                    }
+                  }
+                  setSigFormat(newFormat);
+                }}
+              >
                 <option value="base64">Base64 (r||s)</option>
                 <option value="hex">Hex</option>
                 <option value="der">DER</option>
