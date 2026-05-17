@@ -133,8 +133,18 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
 
         {/* Mode toggle */}
         <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
-          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => { setMode("text"); setResult(null); }} className="h-6 px-3 text-xs">{t('modeText')}</Button>
-          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => { setMode("file"); setResult(null); }} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
+          <Button size="sm" variant={mode === "text" ? "default" : "ghost"} onClick={() => {
+            setMode("text");
+            setResult(null);
+            setSignature((prev) => ({ ...prev, file: "" }));
+            setSigFileName((prev) => ({ ...prev, file: null }));
+          }} className="h-6 px-3 text-xs">{t('modeText')}</Button>
+          <Button size="sm" variant={mode === "file" ? "default" : "ghost"} onClick={() => {
+            setMode("file");
+            setResult(null);
+            setSignature((prev) => ({ ...prev, text: "" }));
+            setSigFileName((prev) => ({ ...prev, text: null }));
+          }} className="h-6 px-3 text-xs">{t('modeFile')}</Button>
         </div>
 
         {/* Message or File */}
