@@ -354,18 +354,9 @@ async function computeFingerprint(publicKeyPem) {
     .toUpperCase();
 }
 
-// ---- ECIES Encrypt / Decrypt ----
+// ---- Helper: ECIES encrypt/decrypt core logic ----
 
-/**
- * ECIES encrypt:
- * 1. Generate ephemeral key pair (r, R)
- * 2. Shared secret S = r * Q  (Q = recipient public key)
- * 3. Derive AES-256-CBC key + HMAC key via SHA-512(S.x)
- * 4. Encrypt plaintext with AES-256-CBC
- * 5. Output: R || IV || ciphertext || HMAC-SHA256(IV||ciphertext)
- * All encoded as base64.
- */
-async function encrypt(plaintext, publicKeyPem) {
+async function eciesEncrypt(inputBytes, publicKeyPem) {
   const pubBytes = fromPEM("BRAINPOOL P512 PUBLIC KEY", publicKeyPem);
   const Q = decodePublicKey(pubBytes);
   const curve = BRAINPOOL_P512;
@@ -387,8 +378,7 @@ async function encrypt(plaintext, publicKeyPem) {
   // Encrypt with AES-256-CBC
   const iv = crypto.getRandomValues(new Uint8Array(16));
   const aesKey = await crypto.subtle.importKey("raw", encKey, { name: "AES-CBC" }, false, ["encrypt"]);
-  const msgBytes = new TextEncoder().encode(plaintext);
-  const cipherBuf = await crypto.subtle.encrypt({ name: "AES-CBC", iv }, aesKey, msgBytes);
+  const cipherBuf = await crypto.subtle.encrypt({ name: "AES-CBC", iv }, aesKey, inputBytes);
   const cipherBytes = new Uint8Array(cipherBuf);
 
   // HMAC-SHA256 over IV || ciphertext
@@ -408,15 +398,14 @@ async function encrypt(plaintext, publicKeyPem) {
   output.set(cipherBytes, off); off += cipherBytes.length;
   output.set(macBytes, off);
 
-  return uint8ArrayToBase64(output);
+  return output;
 }
 
-async function decrypt(ciphertextB64, privateKeyPem) {
+async function eciesDecrypt(data, privateKeyPem) {
   const privBytes = fromPEM("BRAINPOOL P512 PRIVATE KEY", privateKeyPem);
   const d = bytesToBigInt(privBytes);
   const curve = BRAINPOOL_P512;
 
-  const data = base64ToUint8Array(ciphertextB64);
   if (data.length < 129 + 16 + 32) throw new Error("Ciphertext too short");
 
   let off = 0;
@@ -448,85 +437,42 @@ async function decrypt(ciphertextB64, privateKeyPem) {
   // Decrypt AES-256-CBC
   const aesKey = await crypto.subtle.importKey("raw", encKey, { name: "AES-CBC" }, false, ["decrypt"]);
   const plainBuf = await crypto.subtle.decrypt({ name: "AES-CBC", iv }, aesKey, cipherBytes);
-  return new TextDecoder().decode(plainBuf);
+  return new Uint8Array(plainBuf);
+}
+
+// ---- ECIES Encrypt / Decrypt ----
+
+/**
+ * ECIES encrypt:
+ * 1. Generate ephemeral key pair (r, R)
+ * 2. Shared secret S = r * Q  (Q = recipient public key)
+ * 3. Derive AES-256-CBC key + HMAC key via SHA-512(S.x)
+ * 4. Encrypt plaintext with AES-256-CBC
+ * 5. Output: R || IV || ciphertext || HMAC-SHA256(IV||ciphertext)
+ * All encoded as base64.
+ */
+async function encrypt(plaintext, publicKeyPem) {
+  const msgBytes = new TextEncoder().encode(plaintext);
+  const cipherBytes = await eciesEncrypt(msgBytes, publicKeyPem);
+  return uint8ArrayToBase64(cipherBytes);
+}
+
+async function decrypt(ciphertextB64, privateKeyPem) {
+  const data = base64ToUint8Array(ciphertextB64);
+  const plainBytes = await eciesDecrypt(data, privateKeyPem);
+  return new TextDecoder().decode(plainBytes);
 }
 
 // ECIES encrypt raw bytes → base64 ciphertext
 async function encryptBytes(inputBytes, publicKeyPem) {
-  const pubBytes = fromPEM("BRAINPOOL P512 PUBLIC KEY", publicKeyPem);
-  const Q = decodePublicKey(pubBytes);
-  const curve = BRAINPOOL_P512;
-  const G = { x: curve.Gx, y: curve.Gy };
-
-  let r;
-  do { r = randomBigInt(512) % (curve.n - 1n) + 1n; } while (r === 0n);
-  const R = pointMul(r, G, curve);
-  const S = pointMul(r, Q, curve);
-
-  const sxBytes = bigIntToBytes(S.x, 64);
-  const derived = await crypto.subtle.digest("SHA-512", sxBytes);
-  const derivedArr = new Uint8Array(derived);
-  const encKey = derivedArr.slice(0, 32);
-  const macKey = derivedArr.slice(32, 64);
-
-  const iv = crypto.getRandomValues(new Uint8Array(16));
-  const aesKey = await crypto.subtle.importKey("raw", encKey, { name: "AES-CBC" }, false, ["encrypt"]);
-  const cipherBuf = await crypto.subtle.encrypt({ name: "AES-CBC", iv }, aesKey, inputBytes);
-  const cipherBytes = new Uint8Array(cipherBuf);
-
-  const hmacKey = await crypto.subtle.importKey("raw", macKey, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const macData = new Uint8Array(iv.length + cipherBytes.length);
-  macData.set(iv, 0);
-  macData.set(cipherBytes, iv.length);
-  const macBuf = await crypto.subtle.sign("HMAC", hmacKey, macData);
-  const macBytes = new Uint8Array(macBuf);
-
-  const rBytes = encodePublicKey(R);
-  const output = new Uint8Array(rBytes.length + iv.length + cipherBytes.length + macBytes.length);
-  let off = 0;
-  output.set(rBytes, off); off += rBytes.length;
-  output.set(iv, off); off += iv.length;
-  output.set(cipherBytes, off); off += cipherBytes.length;
-  output.set(macBytes, off);
-
-  return uint8ArrayToBase64(output);
+  const cipherBytes = await eciesEncrypt(inputBytes, publicKeyPem);
+  return uint8ArrayToBase64(cipherBytes);
 }
 
 // ECIES decrypt base64 ciphertext → raw Uint8Array
 async function decryptToBytes(ciphertextB64, privateKeyPem) {
-  const privBytes = fromPEM("BRAINPOOL P512 PRIVATE KEY", privateKeyPem);
-  const d = bytesToBigInt(privBytes);
-  const curve = BRAINPOOL_P512;
-
   const data = base64ToUint8Array(ciphertextB64);
-  if (data.length < 129 + 16 + 32) throw new Error("Ciphertext too short");
-
-  let off = 0;
-  const rBytes = data.slice(off, off + 129); off += 129;
-  const iv = data.slice(off, off + 16); off += 16;
-  const macBytes = data.slice(data.length - 32);
-  const cipherBytes = data.slice(off, data.length - 32);
-
-  const R = decodePublicKey(rBytes);
-  const G = { x: curve.Gx, y: curve.Gy };
-  const S = pointMul(d, R, curve);
-
-  const sxBytes = bigIntToBytes(S.x, 64);
-  const derived = await crypto.subtle.digest("SHA-512", sxBytes);
-  const derivedArr = new Uint8Array(derived);
-  const encKey = derivedArr.slice(0, 32);
-  const macKey = derivedArr.slice(32, 64);
-
-  const hmacKey = await crypto.subtle.importKey("raw", macKey, { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
-  const macData = new Uint8Array(iv.length + cipherBytes.length);
-  macData.set(iv, 0);
-  macData.set(cipherBytes, iv.length);
-  const valid = await crypto.subtle.verify("HMAC", hmacKey, macBytes, macData);
-  if (!valid) throw new Error("MAC verification failed — ciphertext may be tampered");
-
-  const aesKey = await crypto.subtle.importKey("raw", encKey, { name: "AES-CBC" }, false, ["decrypt"]);
-  const plainBuf = await crypto.subtle.decrypt({ name: "AES-CBC", iv }, aesKey, cipherBytes);
-  return new Uint8Array(plainBuf);
+  return await eciesDecrypt(data, privateKeyPem);
 }
 
 export {
