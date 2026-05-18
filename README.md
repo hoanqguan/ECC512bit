@@ -1,189 +1,173 @@
 # ECC Crypto Toolkit
 
-## 1. Giới thiệu
+## Mục tiêu
 
-`ECC Crypto Toolkit` là một ứng dụng mật mã học chạy hoàn toàn trên trình duyệt. Ứng dụng sử dụng:
+`ECC Crypto Toolkit` là một ứng dụng mật mã học offline, chạy hoàn toàn trong trình duyệt.
 
-- Đường cong elliptic Brainpool P-512 (RFC 5639).
-- Thuật toán chữ ký số ECDSA với hàm băm SHA-512.
-- Mã hóa hỗn hợp ECIES kết hợp trao đổi khóa ECDH, AES-256-CBC và HMAC-SHA-256.
-- Các hàm băm Web Crypto API: SHA-512 và SHA-256.
-- Thư viện mã hóa thuần JavaScript (`src/lib/brainpool.js`) với toán học BigInt và các phép toán trực tiếp trên đường cong.
+- Không cần backend.
+- Không có tính năng login/auth.
+- Dữ liệu và khóa được xử lý cục bộ trong client.
+- Tài liệu này tập trung vào công nghệ, giải thích cách app xử lý mật mã trên trình duyệt chứ không mô tả backend.
+- Phù hợp để trình bày kỹ thuật, demo ECC và ECIES.
 
-Ứng dụng không cần server để thực hiện toàn bộ thao tác mật mã; mọi khóa và dữ liệu có thể được sinh, ký và giải mã trực tiếp trong trình duyệt.
+## Công nghệ chính
 
-## 2. Công nghệ chính trong ứng dụng
+### 1. ECC Brainpool P-512
 
-- `React 18`, `Vite`, `Tailwind CSS`, `shadcn/ui` cho giao diện.
-- `BigInt` để thực hiện toán học modulo lớn, xử lý các tham số trường số nguyên của đường cong.
-- `crypto.subtle` (Web Crypto API) để thực hiện:
-  - `SHA-512` cho băm message và dẫn xuất khóa.
-  - `SHA-256` cho băm mật khẩu đăng nhập và HMAC.
-  - `AES-CBC` cho mã hóa đối xứng trong ECIES.
-  - `HMAC` cho xác thực tính toàn vẹn ciphertext.
+- Curve: `Brainpool P-512` (RFC 5639)
+- Kích thước khóa: 512 bit
+- Toán học được triển khai bằng `BigInt` trong `src/lib/brainpool.js`
 
-## 3. Đường cong Elliptic Brainpool P-512
+### 2. Chữ ký số
 
-Ứng dụng dùng đường cong Brainpool P-512, một đường cong prime-field tiêu chuẩn châu Âu định nghĩa trong RFC 5639.
+- Thuật toán: `ECDSA`
+- Hàm băm: `SHA-512` (Web Crypto API)
+- Mục tiêu: ký và xác minh dữ liệu
 
-Đường cong có dạng:
+### 3. Mã hóa
 
-`y^2 = x^3 + a x + b (mod p)`
+- Mô hình: `ECIES`
+- Cơ chế:
+  - Trao đổi khóa ECDH
+  - Dẫn xuất khóa bằng `SHA-512`
+  - Mã hóa đối xứng với `AES-256-CBC`
+  - Xác thực dữ liệu bằng `HMAC-SHA-256`
 
-Các tham số chính:
+### 4. Hash & cryptography API
 
-- `p` (prime field):
-  `AADD9DB8DBE9C48B3FD4E6AE33C9FC07CB308DB3B3C9D20ED6639CCA703308717D4D9B009BC66842AECDA12AE6A380E62881FF2F2D82C68528AA6056583A48F3`
-- `a`:
-  `7830A3318B603B89E2327145AC234CC594CBDD8D3DF91610A83441CAEA9863BC2DED5D5AA8253AA10A2EF1C98B9AC8B57F1117A72BF2C7B9E7C1AC4D77FC94CA`
-- `b`:
-  `3DF91610A83441CAEA9863BC2DED5D5AA8253AA10A2EF1C98B9AC8B57F1117A72BF2C7B9E7C1AC4D77FC94CADC083E67984050B75EBAE5DD2809BD638016F723`
-- Điểm sinh `G`:
-  - `Gx`: `81AEE4BDD82ED9645A21322E9C4C6A9385ED9F70B5D916C1B43B62EEF4D0098EFF3B1F78E2D0D48D50D1687B93B97D5F7C6D5047406A5E688B352209BCB9F822`
-  - `Gy`: `7DDE385D566332ECC0EABFA9CF7822FDF209F70024A57B1AA000C55B881F8111B2DCDE494A5F485E5BCA4BD88A2763AED1CA2B2FA8F0540678CD1E0F3AD80892`
-- `n` (order của điểm G):
-  `AADD9DB8DBE9C48B3FD4E6AE33C9FC07CB308DB3B3C9D20ED6639CCA70330870553E5C414CA92619418661197FAC10471DB1D381085DDADDB58796829CA90069`
-- `h` (cofactor): `1`
+- `SHA-512`: dùng cho ECDSA và KDF trong ECIES
+- `SHA-256`: dùng cho HMAC của ECIES
+- `AES-CBC`: mã hóa đối xứng
+- `HMAC`: kiểm tra tính toàn vẹn ciphertext
 
-### 3.1. Toán học đường cong sử dụng trong mã
+## Trao đổi Alice và Bob
 
-Trong `src/lib/brainpool.js`, ứng dụng triển khai:
+- Alice dùng public key của Bob để mã hóa dữ liệu trong tab `Encrypt`.
+- Alice không cần private key của Bob, chỉ cần public key đã được chia sẻ công khai.
+- Khi Bob nhận ciphertext, Bob dùng private key của chính mình trong tab `Decrypt` để giải mã.
+- Với `Sign` và `Verify`: Bob có thể ký message bằng private key, còn Alice hoặc bên khác sẽ kiểm tra chữ ký bằng public key của Bob.
+- Đây là mô hình cơ bản của ECC: public key được phân phối, private key giữ bí mật.
 
-- `mod(a, p)`: tính modulo dương.
-- `modInv(a, p)`: nghịch đảo modulo p dựa trên `a^(p-2) mod p`.
-- `pointAdd(P, Q)`: phép cộng hai điểm trên đường cong.
-- `pointDouble(P)`: phép nhân đôi một điểm.
-- `pointMul(k, P)`: phép nhân vô hướng bằng phương pháp double-and-add.
+## 4 tab chính trong app
 
-Đây là các phép toán nền tảng để xây dựng khóa công khai, chữ ký và chia sẻ bí mật ECDH.
+### Tab Encrypt
 
-## 4. Sinh khóa ECC
+- Dùng public key để mã hóa
+- Hỗ trợ `text` và `file`
+- Kết quả: ciphertext Base64
+- File xuất: `.enc.json`
 
-Khóa được tạo bằng cách:
+### Tab Decrypt
 
-1. Sinh số nguyên ngẫu nhiên `d` trong khoảng `1 <= d <= n-1`.
-2. Tính điểm công khai `Q = d * G` trên đường cong.
+- Dùng private key để giải mã
+- Hỗ trợ input ciphertext hoặc import `.enc.json`
+- Kết quả: plaintext hoặc file download
 
-- `d` là khóa riêng.
-- `Q` là khóa công khai.
+### Tab Sign
 
-Key pair được xuất ra định dạng PEM-like đơn giản:
+- Dùng private key để ký
+- Hỗ trợ `text` và `file`
+- Kết quả: signature `base64` / `hex`
 
-- Public key: `-----BEGIN BRAINPOOL P512 PUBLIC KEY-----`
-- Private key: `-----BEGIN BRAINPOOL P512 PRIVATE KEY-----`
+### Tab Verify
 
-Key cũng có thể chuyển đổi sang/ra JWK với `crv: "brainpoolP512r1"` và các trường `x`, `y`, `d` được mã hóa base64url.
+- Dùng public key để xác minh
+- Hỗ trợ `text` và `file`
+- Hỗ trợ signature `base64` / `hex`
 
-## 5. Chữ ký số ECDSA + SHA-512
+## Trình bày luồng công nghệ (dễ thuyết trình)
 
-Ứng dụng sử dụng ECDSA trên đường cong Brainpool P-512 với hàm băm SHA-512.
+### A. Ký số
 
-Tóm tắt quy trình ký:
+1. User nhập message hoặc chọn file
+2. Message được băm bằng `SHA-512`
+3. Kết quả băm được ký bằng `ECDSA` trên Brainpool P-512
+4. Xuất chữ ký dưới dạng `base64(r||s)` hoặc `hex`
 
-1. `hash = SHA-512(message)`.
-2. `e = hash mod n`.
-3. Chọn nonce ngẫu nhiên `k` trong `(0, n)`.
-4. Tính `R = k * G`.
-5. `r = R.x mod n`.
-6. `s = k^-1 * (e + r * d) mod n`.
-7. Nếu `r == 0` hoặc `s == 0`, lặp lại với `k` khác.
+### B. Xác thực
 
-Trong mã:
+1. User nhập message hoặc chọn file
+2. Message được băm bằng `SHA-512`
+3. Dùng public key để kiểm tra bằng `ECDSA Verify`
+4. Hiện kết quả `Valid` / `Invalid`
 
-- `sign(...)` thực hiện ký bằng cách dùng `randomBigInt(512)` để sinh `k`.
-- `verify(...)` kiểm tra tính đúng đắn bằng công thức:
-  - `w = s^-1 mod n`
-  - `u1 = e * w mod n`
-  - `u2 = r * w mod n`
-  - `X = u1 * G + u2 * Q`
-  - `valid` nếu `X.x mod n === r`
+### C. Mã hóa
 
-Ứng dụng hỗ trợ xuất chữ ký sang nhiều định dạng: Base64, hex, DER, và JSON `(r, s)`.
+1. Sinh khóa tạm thời `r`
+2. Tính điểm `R = r * G`
+3. Tính shared secret `S = r * Q`
+4. Dẫn xuất 64 byte từ `SHA-512(S.x)`
+5. Chia thành:
+   - `encKey` 32 byte cho `AES-256-CBC`
+   - `macKey` 32 byte cho `HMAC-SHA-256`
+6. Mã hóa plaintext/file
+7. Tính MAC trên `IV || ciphertext`
+8. Xuất gói: `R || IV || ciphertext || MAC`
 
-## 6. Hash functions trong ứng dụng
+### D. Giải mã
 
-### SHA-512
+1. Lấy private key
+2. Giải mã `R` từ gói ciphertext
+3. Tính shared secret `S = d * R`
+4. Dẫn xuất `encKey` và `macKey` từ `SHA-512(S.x)`
+5. Verify `HMAC-SHA-256` trước
+6. Nếu hợp lệ, giải mã `AES-256-CBC`
 
-- Dùng để băm message trong ECDSA.
-- Dùng để dẫn xuất khóa đối xứng và khóa HMAC trong ECIES.
-- Dùng `crypto.subtle.digest("SHA-512", data)`.
+## Thiết kế client-side
 
-### SHA-256
+### Tab Encrypt
 
-- Dùng để băm mật khẩu đăng nhập trong `src/lib/localAuth.js`.
-- Dùng để tính HMAC cho gói ciphertext ECIES thực tế.
+- Dùng public key để mã hóa
+- Hỗ trợ `text` và `file`
+- Kết quả: ciphertext Base64
+- File xuất: `.enc.json`
 
-### Ghi chú quan trọng
+### Tab Decrypt
 
-Mặc dù tài liệu giao diện có thể đề cập `HMAC-SHA-512`, thực tế mã thực hiện HMAC với `SHA-256` trong ECIES. Khóa HMAC vẫn được dẫn xuất từ SHA-512 của shared secret.
+- Dùng private key để giải mã
+- Hỗ trợ input ciphertext hoặc import `.enc.json`
+- Kết quả: plaintext hoặc file download
 
-## 7. Mã hóa ECIES
+### Tab Sign
 
-Ứng dụng dùng một biến thể ECIES thuần JS với các bước:
+- Dùng private key để ký
+- Hỗ trợ `text` và `file`
+- Kết quả: signature `base64` / `hex`
 
-1. Sinh khóa tạm thời `r` và tính điểm tạm thời `R = r * G`.
-2. Tính shared secret `S = r * Q` với `Q` là khóa công khai của người nhận.
-3. Dẫn xuất 64 byte từ `SHA-512(S.x)`.
-4. Chia làm hai phần:
-   - `encKey = first 32 bytes` → AES-256-CBC.
-   - `macKey = last 32 bytes` → HMAC-SHA-256.
-5. Mã hóa plaintext bằng `AES-CBC` với IV 16 byte ngẫu nhiên.
-6. Tính MAC trên `IV || ciphertext`.
-7. Kết quả đầu ra: `R || IV || ciphertext || mac`, sau đó mã hóa Base64.
+### Tab Verify
 
-### Ghi chú kỹ thuật
+- Dùng public key để xác minh
+- Hỗ trợ `text` và `file`
+- Hỗ trợ signature `base64` / `hex`
 
-- `R` được mã hóa dạng public key không nén (uncompressed): `0x04 || x || y`.
-- HMAC xác thực toàn vẹn ciphertext và IV.
-- Khi giải mã, ứng dụng kiểm tra MAC trước khi giải mã AES, bảo vệ chống tấn công thay đổi dữ liệu.
+## Thiết kế client-side
 
-## 8. Định dạng và chuyển đổi khóa
+- `src/pages/CryptoToolkit.jsx`: quản lý tab, state, key selection
+- `src/components/crypto/EncryptPanel.jsx`: mã hóa ECIES
+- `src/components/crypto/DecryptPanel.jsx`: giải mã ECIES
+- `src/components/crypto/SignPanel.jsx`: ký ECDSA
+- `src/components/crypto/VerifyPanel.jsx`: xác minh ECDSA
+- `src/lib/brainpool.js`: thuật toán ECC, ECDSA, ECIES, conversion
+- `src/lib/historyStore.js`: ghi lại lịch sử thao tác
 
-Ứng dụng hỗ trợ:
+## Lưu trữ key pair
 
-- PEM-like custom key format cho public/private brainpool.
-- JWK (JSON Web Key) cho interoperable EC key exchange.
-- Point uncompressed form: `0x04 || x || y`.
-- Base64 URL-safe để lưu / truyền dữ liệu trong chuỗi.
+- Key pair được lưu trong `localStorage` của trình duyệt dưới khóa `ecc_keypairs`.
+- Dữ liệu được ghi dưới dạng mảng JSON, mỗi phần tử chứa:
+  - `id`: UUID khóa
+  - `name`: tên key (tối đa 12 ký tự)
+  - `public_key_pem`: public key PEM
+  - `private_key_pem`: private key PEM
+  - `fingerprint`: fingerprint của public key
+  - `created_date`, `updated_date`
+  - `notes` nếu có
+- Việc lưu và đọc key được thực hiện trong `src/lib/localKeyStore.js`.
+- Khi import hoặc tạo key mới, ứng dụng sẽ ghi thêm phần tử vào mảng hiện có và cập nhật lại `localStorage`.
 
-Các hàm chuyển đổi chính nằm trong `src/lib/brainpool.js`:
+## Ghi chú khi thuyết trình
 
-- `publicKeyPemToJWK`
-- `privateKeyPemToJWK`
-- `jwkToPublicKeyPem`
-- `jwkToPrivateKeyPem`
-
-## 9. Bảo mật & giới hạn
-
-### Ưu điểm
-
-- Brainpool P-512 cung cấp độ an toàn cao hơn so với các đường cong 256-bit.
-- Mã chạy offline và không phụ thuộc vào backend, nên dữ liệu khóa có thể được giữ trong trình duyệt.
-- ECIES kết hợp cả mã hóa đối xứng và xác thực MAC.
-
-### Giới hạn quan trọng
-
-- Mã chưa có các bảo vệ side-channel, constant-time, hoặc hardening cho tấn công kênh rò rỉ.
-- `localAuth.js` dùng SHA-256 cho mật khẩu mà không có salt hoặc PBKDF2, do đó chỉ phù hợp cho xác thực UI nội bộ, không phải là lưu trữ mật khẩu an toàn.
-- AES-CBC không cung cấp tính duy nhất ngữ cảnh như GCM; bảo mật phụ thuộc vào MAC và IV ngẫu nhiên.
-- Đường cong Brainpool ít phổ biến hơn NIST, nên tính tương thích với thư viện bên ngoài có thể hạn chế.
-- Việc sử dụng nonce `k` ngẫu nhiên trong ECDSA mà không có deterministic RFC 6979 dễ bị yếu nếu RNG kém.
-
-## 10. Các tệp mã nguồn liên quan
-
-- `src/lib/brainpool.js` — triển khai toàn bộ ECC Brainpool P-512, sinh khóa, chữ ký, xác thực, ECIES, và chuyển đổi định dạng.
-- `src/lib/localAuth.js` — xác thực người dùng nội bộ bằng SHA-256 và localStorage.
-- `src/components/crypto/GenerateKeyModal.jsx` — UI hiển thị thông tin khóa Brainpool P-512 và thuật toán ECDSA + SHA-512.
-- `src/components/crypto/EncryptPanel.jsx` / `DecryptPanel.jsx` — giao diện mã hóa/giải mã ECIES.
-- `src/components/crypto/SignPanel.jsx` / `VerifyPanel.jsx` — giao diện ký và xác minh ECDSA.
-- `src/pages/Report.jsx` — trang báo cáo trong ứng dụng mô tả lại các công nghệ và thuật toán.
-
-## 11. Kết luận
-
-Ứng dụng này là một bộ công cụ mật mã học minh họa cách kết hợp:
-
-- ECC Brainpool P-512 cho khóa và chữ ký.
-- SHA-512 cho băm và dẫn xuất khóa.
-- AES-256-CBC + HMAC-SHA-256 cho mã hóa dữ liệu.
-
-Tuy nhiên, đây là triển khai học thuật/demo; nếu muốn dùng trong sản phẩm thực, cần bổ sung bảo vệ an toàn, xác thực đầu cuối, quản lý khóa mạnh và tiêu chuẩn hóa định dạng.
+- Ứng dụng hoàn toàn chạy trên trình duyệt, không cần server.
+- Key và dữ liệu không rời khỏi client.
+- Brainpool P-512 là điểm khác biệt so với NIST curve thường gặp.
+- ECIES ở đây dùng `SHA-512` để dẫn xuất khóa và `HMAC-SHA-256` để xác thực.
+- Mục tiêu là minh họa quy trình mật mã, không phải triển khai production-grade security.
