@@ -157,7 +157,7 @@ export default function EncryptPanel({ selectedKey, showKeyList }) {
 
         <Button onClick={handleEncrypt} disabled={loading || !(selectedKey || manualPublic)} className="w-full">
           {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lock className="w-4 h-4 mr-2" />}
-          {t('encryptButton')} {mode === "file" ? t('modeFile') : t('modeText')} (ECIES)
+          ECIES (Brainpool P512) {t('encryptButton')} {mode === "file" ? t('modeFile') : t('modeText')}
         </Button>
 
         {warning && (

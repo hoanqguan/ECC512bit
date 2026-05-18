@@ -179,7 +179,7 @@ export default function DecryptPanel({ selectedKey, showKeyList }) {
 
         <Button onClick={handleDecrypt} disabled={loading || !(selectedKey || manualPrivate)} className="w-full">
           {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Unlock className="w-4 h-4 mr-2" />}
-          {t('decryptButton')} {mode === "file" ? t('modeFile') : t('modeText')} (ECIES)
+          ECIES (Brainpool P512) {t('decryptButton')} {mode === "file" ? t('modeFile') : t('modeText')}
         </Button>
 
         {warning && (
