@@ -217,7 +217,7 @@ export default function VerifyPanel({ selectedKey, showKeyList }) {
 
         <Button onClick={handleVerify} disabled={loading || !(selectedKey || manualPublic)} className="w-full">
           {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
-          {t('verifyButton')} {mode === "file" ? t('modeFile') : t('verify')}
+          ECDSA (Brainpool P512) {t('verifyButton')} {mode === "file" ? t('modeFile') : t('verify')}
         </Button>
 
         {warning && (

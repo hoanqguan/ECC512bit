@@ -152,7 +152,7 @@ export default function SignPanel({ selectedKey, showKeyList }) {
 
         <Button onClick={handleSign} disabled={loading || !(selectedKey || manualPrivate)} className="w-full">
           {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PenLine className="w-4 h-4 mr-2" />}
-          ECDSA {t('signButton')} {mode === "file" ? t('modeFile') : t('modeText')}
+          ECDSA (Brainpool P512) {t('signButton')} {mode === "file" ? t('modeFile') : t('modeText')}
         </Button>
 
         {warning && (
